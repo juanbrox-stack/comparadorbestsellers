@@ -396,12 +396,20 @@ def analyze_with_gemini(row, html: str) -> dict:
         ref = row
         precio = row.get("precio", 0)
     prompt = PROMPT_TEMPLATE.format(ref=json.dumps(ref, ensure_ascii=False), html=html[:4000], precio=precio)
-    try:
-        resp = model.generate_content(prompt)
-        raw = re.sub(r"```json|```", "", resp.text).strip()
-        return json.loads(raw)
-    except Exception as e:
-        return {"no_encontrado": True, "motivo": str(e)[:150]}
+    # Retry logic para el límite de 15 RPM del tier gratuito
+    for intento in range(4):
+        try:
+            resp = model.generate_content(prompt)
+            raw = re.sub(r"```json|```", "", resp.text).strip()
+            return json.loads(raw)
+        except Exception as e:
+            msg = str(e)
+            if "429" in msg or "quota" in msg.lower() or "rate" in msg.lower():
+                wait = 15 * (intento + 1)   # 15s → 30s → 45s → 60s
+                time.sleep(wait)
+                continue
+            return {"no_encontrado": True, "motivo": msg[:150]}
+    return {"no_encontrado": True, "motivo": "Límite de cuota API alcanzado. Espera 1 min y reintenta."}
 
 def build_query(row) -> str:
     if isinstance(row, pd.Series):
@@ -516,7 +524,7 @@ def run_search(df_to_process):
         html = scrape_cecotec(build_query(row))
         alt  = analyze_with_gemini(row, html)
         results.append({"ref": row.to_dict(), "alt": alt})
-        time.sleep(0.5)
+        time.sleep(4.5)   # 15 RPM max → ~4s entre llamadas
     prog.progress(1.0, text="✅ Listo")
     status_box.empty()
     return results
@@ -570,7 +578,7 @@ with tab_keepa:
             df_relevant["precio"].between(precio_min, precio_max)
         ].head(int(max_prods))
 
-        st.info(f"Se procesarán **{len(df_to_process)}** productos (~{len(df_to_process)*5} s estimados).")
+        st.info(f"Se procesarán **{len(df_to_process)}** productos (~{len(df_to_process)*5} s estimados · límite API: 15 peticiones/min).")
 
         if st.button("🚀 Buscar alternativas Cecotec", type="primary", use_container_width=True, key="btn_keepa"):
             results = run_search(df_to_process)
@@ -652,7 +660,7 @@ with tab_fichero:
                                              len(df_custom), min(20, len(df_custom)), key="max_custom")
 
             df_proc = (df_rel_custom if solo_relevantes else df_all_custom).head(int(max_custom))
-            st.info(f"Se procesarán **{len(df_proc)}** productos.")
+            st.info(f"Se procesarán **{len(df_proc)}** productos (~{len(df_proc)*5} s estimados · límite API: 15 peticiones/min).")
 
             if st.button("🚀 Buscar alternativas Cecotec", type="primary", use_container_width=True, key="btn_custom"):
                 results = run_search(df_proc)
