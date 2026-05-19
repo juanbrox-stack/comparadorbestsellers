@@ -591,36 +591,96 @@ with tab_keepa:
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab_manual:
     st.markdown('<div class="cec-section-title">✏️ Buscar alternativa para un producto concreto</div>', unsafe_allow_html=True)
-    st.caption("Introduce los datos del producto competidor que quieres comparar con Cecotec.")
+    st.caption("Introduce el ASIN de Amazon — el resto de datos se obtienen automáticamente.")
 
-    c1, c2 = st.columns(2)
-    with c1:
-        m_titulo   = st.text_input("Nombre del producto *", placeholder="ej: Rowenta Pure Pop Cepillo vapor 1300W")
-        m_marca    = st.text_input("Marca *", placeholder="ej: Rowenta")
-        m_precio   = st.number_input("Precio (€) *", min_value=0.01, step=0.01, value=29.99)
-    with c2:
-        m_subcat   = st.text_input("Categoría / tipo de producto *", placeholder="ej: Planchas de vapor")
-        m_caract   = st.text_area("Características principales", height=120,
-                                  placeholder="ej: 1300W, 20 g/min vapor, cabezales reversibles, elimina pelusas")
-        m_asin     = st.text_input("ASIN Amazon (opcional)", placeholder="ej: B0BY9592V9")
+    col_asin, col_price = st.columns([3, 1])
+    with col_asin:
+        m_asin = st.text_input("ASIN Amazon *", placeholder="ej: B0BY9592V9",
+                               help="Identificador único del producto en Amazon.es. Lo encontrarás en la URL del producto.")
+    with col_price:
+        m_precio_override = st.number_input("Precio (€) opcional", min_value=0.0, step=0.01, value=0.0,
+                                            help="Déjalo en 0 para usar el precio que obtengamos de Amazon")
+
+    with st.expander("➕ Datos adicionales (opcional — se autorellenan con el ASIN)"):
+        c1, c2 = st.columns(2)
+        with c1:
+            m_titulo = st.text_input("Nombre del producto", placeholder="Se obtiene del ASIN")
+            m_marca  = st.text_input("Marca", placeholder="Se obtiene del ASIN")
+            m_precio_manual = st.number_input("Precio manual (€)", min_value=0.0, step=0.01, value=0.0)
+        with c2:
+            m_subcat = st.text_input("Categoría", placeholder="Se obtiene del ASIN")
+            m_caract = st.text_area("Características", height=100, placeholder="Se obtienen del ASIN")
 
     if st.button("🔍 Buscar en Cecotec", type="primary", use_container_width=True, key="btn_manual"):
-        if not m_titulo or not m_marca or not m_subcat:
-            st.error("Rellena al menos nombre, marca y categoría.")
+        asin = m_asin.strip().upper()
+        if not asin:
+            st.error("El ASIN es obligatorio.")
         else:
-            with st.spinner(f"Buscando alternativa para **{m_titulo}**…"):
-                row_dict = {
-                    "titulo": m_titulo, "fabricante": m_marca, "precio": m_precio,
-                    "subcategoria": m_subcat, "caracteristicas": m_caract,
-                    "asin": m_asin, "url_amazon": f"https://www.amazon.es/dp/{m_asin}" if m_asin else "",
-                    "feat1": m_caract,
-                }
-                html = scrape_cecotec(f"{m_subcat} {m_caract[:60]}")
-                alt  = analyze_with_gemini(row_dict, html)
-                result = [{"ref": row_dict, "alt": alt}]
-                st.session_state["results_manual"] = result
-            st.success("✅ Búsqueda completada. Resultado:")
-            render_results(result)
+            with st.spinner(f"Obteniendo datos de Amazon para **{asin}**…"):
+                # Scrape Amazon product page to get all data
+                amz_url = f"https://www.amazon.es/dp/{asin}"
+                amz_data = {"titulo": m_titulo, "fabricante": m_marca,
+                            "subcategoria": m_subcat, "caracteristicas": m_caract,
+                            "precio": m_precio_manual or m_precio_override or 0,
+                            "asin": asin, "url_amazon": amz_url}
+                try:
+                    amz_headers = {**HEADERS, "Accept": "text/html,application/xhtml+xml",
+                                   "Accept-Encoding": "gzip, deflate"}
+                    r = requests.get(amz_url, headers=amz_headers, timeout=14)
+                    soup = BeautifulSoup(r.text, "html.parser")
+
+                    # Title
+                    if not amz_data["titulo"]:
+                        t = soup.select_one("#productTitle, #title")
+                        if t: amz_data["titulo"] = t.get_text(strip=True)[:200]
+
+                    # Brand
+                    if not amz_data["fabricante"]:
+                        b = soup.select_one("#bylineInfo, .po-brand .a-span9")
+                        if b: amz_data["fabricante"] = b.get_text(strip=True).replace("Marca:", "").replace("Visita la Store de","").strip()[:80]
+
+                    # Price
+                    if not amz_data["precio"]:
+                        p = soup.select_one(".a-price .a-offscreen, #priceblock_ourprice, #priceblock_dealprice")
+                        if p:
+                            raw_price = p.get_text(strip=True).replace("€","").replace(",",".").strip()
+                            try: amz_data["precio"] = float(re.sub(r"[^\d.]","", raw_price))
+                            except: pass
+
+                    # Bullet features
+                    if not amz_data["caracteristicas"]:
+                        bullets = soup.select("#feature-bullets li span:not(.a-list-item)")
+                        if not bullets:
+                            bullets = soup.select("#feature-bullets .a-list-item")
+                        feats = [b.get_text(strip=True) for b in bullets[:5] if b.get_text(strip=True)]
+                        amz_data["caracteristicas"] = " | ".join(feats)[:500]
+
+                    # Category breadcrumb
+                    if not amz_data["subcategoria"]:
+                        crumbs = soup.select("#wayfinding-breadcrumbs_feature_div li")
+                        if crumbs: amz_data["subcategoria"] = crumbs[-1].get_text(strip=True)
+
+                    amz_data["feat1"] = amz_data["caracteristicas"]
+
+                except Exception as e:
+                    st.warning(f"No se pudo obtener datos de Amazon ({e}). Usando los datos introducidos manualmente.")
+
+            # Show what we got
+            if amz_data["titulo"] or amz_data["caracteristicas"]:
+                st.success(f"✅ Datos obtenidos: **{amz_data.get('titulo','')[:60]}** · {amz_data.get('fabricante','')} · {amz_data.get('precio','')}€")
+            else:
+                st.info("Amazon no devolvió datos (posible bloqueo). Usando datos manuales si los introdujiste.")
+
+            if not amz_data["titulo"] and not amz_data["subcategoria"]:
+                st.error("No hay suficientes datos para buscar. Rellena al menos el nombre y categoría en 'Datos adicionales'.")
+            else:
+                with st.spinner("Buscando alternativa en Cecotec…"):
+                    query = f"{amz_data['subcategoria']} {amz_data['caracteristicas'][:60]}".strip() or amz_data["titulo"][:60]
+                    html_cec = scrape_cecotec(query)
+                    alt = analyze_with_gemini(amz_data, html_cec)
+                    result = [{"ref": amz_data, "alt": alt}]
+                    st.session_state["results_manual"] = result
+                render_results(result)
 
     elif "results_manual" in st.session_state:
         render_results(st.session_state["results_manual"])
