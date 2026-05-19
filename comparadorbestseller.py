@@ -1,53 +1,89 @@
 """
-Comparador Cecotec — carga automática de exports Keepa (Hogar + Belleza)
-Busca alternativas con stock en cecotec.es que igualen o superen prestaciones
-a menor precio, usando Claude como motor de análisis.
+Comparador Cecotec — Keepa Bestsellers (Hogar + Belleza)
+Motor IA: Google Gemini Flash (gratuito via Google AI Studio)
 """
 
 import streamlit as st
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
-import anthropic
-import json
-import re
-import time
+import json, re, time, os
 from pathlib import Path
+import google.generativeai as genai
 
 # ── Page config ───────────────────────────────────────────────────────────────
-st.set_page_config(
-    page_title="Comparador Cecotec · Keepa",
-    page_icon="🔍",
-    layout="wide",
-)
+st.set_page_config(page_title="Comparador Cecotec · Keepa", page_icon="🔍", layout="wide")
 
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
 html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
-
 .hero {
     background: linear-gradient(120deg,#c0392b,#e74c3c 60%,#e67e22);
     color:#fff; padding:2rem 2.5rem; border-radius:16px; margin-bottom:1.5rem;
 }
 .hero h1 { font-size:2rem; font-weight:700; margin:0; }
 .hero p  { opacity:.88; margin:.3rem 0 0; font-size:.95rem; }
-
 .kpi-row { display:flex; gap:1rem; margin-bottom:1.5rem; flex-wrap:wrap; }
 .kpi { background:#fff; border-radius:12px; padding:1rem 1.4rem;
        box-shadow:0 2px 8px rgba(0,0,0,.07); flex:1; min-width:130px; }
 .kpi .val { font-size:1.8rem; font-weight:700; color:#c0392b; }
 .kpi .lbl { font-size:.78rem; color:#666; text-transform:uppercase; letter-spacing:.04em; }
-
 .card { background:#fff; border-radius:12px; padding:1.4rem;
         box-shadow:0 2px 8px rgba(0,0,0,.07); margin-bottom:1.2rem; }
-
-.tag-mejor  { background:#d4edda; color:#155724; padding:2px 10px; border-radius:20px; font-size:.8rem; font-weight:600; }
-.tag-igual  { background:#fff3cd; color:#856404; padding:2px 10px; border-radius:20px; font-size:.8rem; font-weight:600; }
-.tag-peor   { background:#f8d7da; color:#721c24; padding:2px 10px; border-radius:20px; font-size:.8rem; font-weight:600; }
-.tag-skip   { background:#e2e3e5; color:#383d41; padding:2px 10px; border-radius:20px; font-size:.8rem; font-weight:600; }
+.tag-mejor { background:#d4edda; color:#155724; padding:2px 10px; border-radius:20px; font-size:.8rem; font-weight:600; }
+.tag-igual { background:#fff3cd; color:#856404; padding:2px 10px; border-radius:20px; font-size:.8rem; font-weight:600; }
+.tag-peor  { background:#f8d7da; color:#721c24; padding:2px 10px; border-radius:20px; font-size:.8rem; font-weight:600; }
+.tag-skip  { background:#e2e3e5; color:#383d41; padding:2px 10px; border-radius:20px; font-size:.8rem; font-weight:600; }
 </style>
 """, unsafe_allow_html=True)
+
+# ── API Key setup ─────────────────────────────────────────────────────────────
+def get_gemini_key():
+    key = None
+    try:
+        key = st.secrets.get("GOOGLE_API_KEY", None)
+    except Exception:
+        pass
+    if not key:
+        key = os.environ.get("GOOGLE_API_KEY", None)
+    return key
+
+api_key = get_gemini_key()
+
+if not api_key:
+    st.markdown("""
+    <div class="hero">
+      <h1>🔍 Comparador Cecotec · Bestsellers Amazon</h1>
+      <p>Motor IA: Google Gemini (gratuito)</p>
+    </div>
+    """, unsafe_allow_html=True)
+    st.warning("### 🔑 Configura tu API key de Google Gemini (gratuita)")
+    st.markdown("""
+    1. Ve a **[aistudio.google.com/apikey](https://aistudio.google.com/apikey)**
+    2. Haz clic en **"Create API Key"** (es gratuito)
+    3. Copia la key y pégala aquí abajo 👇
+    """)
+    key_input = st.text_input("Google API Key", type="password", placeholder="AIza...")
+    if key_input:
+        st.session_state["GOOGLE_API_KEY"] = key_input
+        st.rerun()
+    elif "GOOGLE_API_KEY" in st.session_state:
+        api_key = st.session_state["GOOGLE_API_KEY"]
+    else:
+        st.info("También puedes configurarla en **Streamlit Cloud → Settings → Secrets**: `GOOGLE_API_KEY = 'AIza...'`")
+        st.stop()
+
+if not api_key and "GOOGLE_API_KEY" in st.session_state:
+    api_key = st.session_state["GOOGLE_API_KEY"]
+
+genai.configure(api_key=api_key)
+
+@st.cache_resource
+def get_model():
+    return genai.GenerativeModel("gemini-1.5-flash")
+
+model = get_model()
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 KEEPA_HOGAR   = "KeepaExport-2026-05-19-BestSellersList-9-599391031.xlsx"
@@ -63,19 +99,16 @@ CECOTEC_CATS = {
     "Máquinas de café",
     "Planchas de vapor", "Planchas de vapor verticales para viaje",
     "Cepillos de vapor", "Centros de planchado",
-    "Balanzas digitales", "Básculas de cocina",
-    "Básculas de baño",
+    "Balanzas digitales", "Básculas de cocina", "Básculas de baño",
     "Batidoras amasadoras",
     "Purificadores de aire", "Humidificadores", "Ventiladores",
     "Aires acondicionados portátiles",
-    "Televisores", "Monitores", "Proyectores",
-    "Altavoces portátiles",
+    "Televisores", "Monitores", "Proyectores", "Altavoces portátiles",
     "Desincrustantes",
     "Secadores de pelo", "Planchas para el pelo", "Rizadores",
     "Cepillos eléctricos para el cabello",
     "Afeitadoras eléctricas", "Depiladores",
-    "Cepillos de dientes eléctricos",
-    "Masajeadores",
+    "Cepillos de dientes eléctricos", "Masajeadores",
 }
 
 HEADERS = {
@@ -85,13 +118,6 @@ HEADERS = {
     ),
     "Accept-Language": "es-ES,es;q=0.9",
 }
-
-# ── Claude client ─────────────────────────────────────────────────────────────
-@st.cache_resource
-def get_client():
-    return anthropic.Anthropic()
-
-client = get_client()
 
 # ── Data loading ──────────────────────────────────────────────────────────────
 @st.cache_data
@@ -105,10 +131,8 @@ def load_keepa_files(upload_dir: str) -> pd.DataFrame:
         df = pd.read_excel(path)
         df["_source"] = source
         dfs.append(df)
-
     if not dfs:
         return pd.DataFrame()
-
     merged = pd.concat(dfs, ignore_index=True)
     merged = merged.rename(columns={
         "ASIN": "asin",
@@ -128,24 +152,19 @@ def load_keepa_files(upload_dir: str) -> pd.DataFrame:
         "Descripción & Características: Característica 4": "feat4",
         "Descripción & Características: Descripción breve": "descripcion_breve",
     })
-
     merged = merged.sort_values("ranking")
     merged = merged.groupby("_source").head(100).reset_index(drop=True)
-
     merged["_cecotec_relevant"] = merged["subcategoria"].apply(
         lambda s: any(cat.lower() in str(s).lower() for cat in CECOTEC_CATS)
     )
-
     def build_feats(row):
         parts = [str(row.get(f"feat{i}", "") or "") for i in range(1, 5)]
         parts.append(str(row.get("descripcion_breve", "") or ""))
         return " | ".join(p[:120] for p in parts if p.strip())[:500]
-
     merged["caracteristicas"] = merged.apply(build_feats, axis=1)
     return merged
 
-
-# ── Scraping + AI ─────────────────────────────────────────────────────────────
+# ── Scraping ──────────────────────────────────────────────────────────────────
 def scrape_cecotec(query: str) -> str:
     url = f"https://www.cecotec.es/buscar?q={requests.utils.quote(query)}"
     try:
@@ -159,33 +178,27 @@ def scrape_cecotec(query: str) -> str:
     except Exception as e:
         return f"SCRAPING_ERROR: {e}"
 
+# ── Gemini analysis ───────────────────────────────────────────────────────────
+PROMPT_TEMPLATE = """Eres un experto en electrónica de hogar y pequeño electrodoméstico español.
 
-SYSTEM = """Eres un experto en electrónica de hogar y pequeño electrodoméstico español.
-Tu tarea: dado un producto de referencia de Amazon y HTML de resultados de cecotec.es,
-identifica el mejor producto Cecotec que esté en stock, iguale o supere las prestaciones
-del producto de referencia y tenga un precio INFERIOR.
-Responde SOLO con JSON válido, sin markdown, sin texto fuera del JSON."""
+Producto de referencia Amazon:
+{ref}
 
+HTML de resultados cecotec.es:
+{html}
 
-def analyze_with_claude(row: pd.Series, html: str) -> dict:
-    ref = {
-        "titulo": row.get("titulo", ""),
-        "fabricante": row.get("fabricante", ""),
-        "precio_eur": row.get("precio", 0),
-        "subcategoria": row.get("subcategoria", ""),
-        "caracteristicas": row.get("caracteristicas", ""),
-    }
-    prompt = f"""Producto de referencia Amazon:
-{json.dumps(ref, ensure_ascii=False, indent=2)}
+Tu tarea: identifica el mejor producto Cecotec que:
+1. Esté en stock
+2. Iguale o supere las prestaciones del producto de referencia
+3. Tenga precio INFERIOR al producto de referencia ({precio} €)
 
-HTML cecotec.es:
-{html[:4500]}
+Responde SOLO con JSON válido, sin markdown, sin texto fuera del JSON.
 
-Devuelve exactamente este JSON (null si no tienes el dato):
+Si encuentras alternativa válida:
 {{
   "cecotec_nombre": "...",
   "cecotec_precio": 0.0,
-  "cecotec_caracteristicas": "resumen specs clave",
+  "cecotec_caracteristicas": "resumen specs clave en 100 chars",
   "cecotec_url": "https://www.cecotec.es/...",
   "cecotec_referencia": null,
   "cecotec_stock": true,
@@ -194,40 +207,47 @@ Devuelve exactamente este JSON (null si no tienes el dato):
   "prestaciones": "mejor|igual|peor",
   "justificacion": "max 120 chars"
 }}
-Si NO existe alternativa válida: {{"no_encontrado": true, "motivo": "..."}}"""
 
-    resp = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=900,
-        system=SYSTEM,
-        messages=[{"role": "user", "content": prompt}],
+Si NO existe alternativa válida:
+{{"no_encontrado": true, "motivo": "razón breve"}}"""
+
+def analyze_with_gemini(row: pd.Series, html: str) -> dict:
+    ref = {
+        "titulo": row.get("titulo", ""),
+        "fabricante": row.get("fabricante", ""),
+        "subcategoria": row.get("subcategoria", ""),
+        "caracteristicas": row.get("caracteristicas", ""),
+    }
+    prompt = PROMPT_TEMPLATE.format(
+        ref=json.dumps(ref, ensure_ascii=False),
+        html=html[:4000],
+        precio=row.get("precio", 0),
     )
-    raw = re.sub(r"```json|```", "", resp.content[0].text).strip()
     try:
+        resp = model.generate_content(prompt)
+        raw = re.sub(r"```json|```", "", resp.text).strip()
         return json.loads(raw)
-    except Exception:
-        return {"no_encontrado": True, "motivo": raw[:200]}
-
+    except Exception as e:
+        return {"no_encontrado": True, "motivo": str(e)[:150]}
 
 def build_query(row: pd.Series) -> str:
     subcat = str(row.get("subcategoria", "")).split(",")[0].strip()
     feat   = str(row.get("feat1", "") or "")[:60]
     return f"{subcat} {feat}".strip()
 
-
 # ── UI ────────────────────────────────────────────────────────────────────────
 st.markdown("""
 <div class="hero">
   <h1>🔍 Comparador Cecotec · Bestsellers Amazon</h1>
-  <p>Top-100 Hogar &amp; Belleza · Alternativas Cecotec con mejor precio e iguales o mejores prestaciones</p>
+  <p>Top-100 Hogar &amp; Belleza · Alternativas Cecotec con mejor precio · Motor: Google Gemini ✨</p>
 </div>
 """, unsafe_allow_html=True)
 
-UPLOAD_DIR = Path(__file__).parent  # misma carpeta que app.py
+UPLOAD_DIR = Path(__file__).parent
 df_all = load_keepa_files(str(UPLOAD_DIR))
 
 if df_all.empty:
-    st.error("No se encontraron los archivos Keepa.")
+    st.error("No se encontraron los archivos Keepa. Asegúrate de que los xlsx están en la misma carpeta que app.py.")
     st.stop()
 
 df_relevant = df_all[df_all["_cecotec_relevant"]].copy()
@@ -278,7 +298,7 @@ with tab_search:
         df_relevant["precio"].between(precio_min, precio_max)
     ].head(int(max_prods))
 
-    st.info(f"Se procesarán **{len(df_to_process)}** productos (~{len(df_to_process)*7} segundos estimados).")
+    st.info(f"Se procesarán **{len(df_to_process)}** productos (~{len(df_to_process)*5} segundos estimados).")
     run_btn = st.button("🚀 Iniciar comparación", type="primary", use_container_width=True)
 
 if run_btn:
@@ -290,9 +310,9 @@ if run_btn:
         prog.progress(i / total, text=f"[{i+1}/{total}] {row['titulo'][:55]}…")
         status_box.caption(f"🔍 Subcategoría: **{row['subcategoria']}**")
         html = scrape_cecotec(build_query(row))
-        alt  = analyze_with_claude(row, html)
+        alt  = analyze_with_gemini(row, html)
         results.append({"ref": row.to_dict(), "alt": alt})
-        time.sleep(0.6)
+        time.sleep(0.5)
     prog.progress(1.0, text="✅ Listo")
     status_box.empty()
     st.session_state["results"] = results
