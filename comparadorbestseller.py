@@ -40,14 +40,18 @@ html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
 
 # ── API Key setup ─────────────────────────────────────────────────────────────
 def get_gemini_key():
-    key = None
+    # 1. session_state (introducida por el usuario en UI)
+    if "GOOGLE_API_KEY" in st.session_state and st.session_state["GOOGLE_API_KEY"]:
+        return st.session_state["GOOGLE_API_KEY"]
+    # 2. Streamlit secrets
     try:
-        key = st.secrets.get("GOOGLE_API_KEY", None)
+        k = st.secrets.get("GOOGLE_API_KEY", None)
+        if k:
+            return k
     except Exception:
         pass
-    if not key:
-        key = os.environ.get("GOOGLE_API_KEY", None)
-    return key
+    # 3. Env var
+    return os.environ.get("GOOGLE_API_KEY", None)
 
 api_key = get_gemini_key()
 
@@ -64,18 +68,15 @@ if not api_key:
     2. Haz clic en **"Create API Key"** (es gratuito)
     3. Copia la key y pégala aquí abajo 👇
     """)
-    key_input = st.text_input("Google API Key", type="password", placeholder="AIza...")
-    if key_input:
-        st.session_state["GOOGLE_API_KEY"] = key_input
-        st.rerun()
-    elif "GOOGLE_API_KEY" in st.session_state:
-        api_key = st.session_state["GOOGLE_API_KEY"]
-    else:
-        st.info("También puedes configurarla en **Streamlit Cloud → Settings → Secrets**: `GOOGLE_API_KEY = 'AIza...'`")
-        st.stop()
-
-if not api_key and "GOOGLE_API_KEY" in st.session_state:
-    api_key = st.session_state["GOOGLE_API_KEY"]
+    key_input = st.text_input("Google API Key", type="password", placeholder="AIzaSy...")
+    if st.button("✅ Guardar y continuar", type="primary"):
+        if key_input and key_input.startswith("AIza"):
+            st.session_state["GOOGLE_API_KEY"] = key_input
+            st.rerun()
+        else:
+            st.error("Key inválida. Debe empezar por AIzaSy...")
+    st.info("O configúrala en **Streamlit Cloud → Settings → Secrets**: `GOOGLE_API_KEY = 'AIzaSy...'`")
+    st.stop()
 
 genai.configure(api_key=api_key)
 
