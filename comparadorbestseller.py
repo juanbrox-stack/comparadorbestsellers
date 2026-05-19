@@ -57,6 +57,7 @@ st.markdown("""
 KEEPA_HOGAR   = "KeepaExport-2026-05-19-BestSellersList-9-599391031.xlsx"
 KEEPA_BELLEZA = "BellezaKeepaExport-2026-05-19-BestSellersList-9-4347698031-9000.xlsx"
 FEED_FILE     = "feed_Espan_a.xlsx"
+STOCK_FILE    = "stock_cecotec.csv"
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36",
@@ -151,6 +152,26 @@ def load_cecotec_feed(path_str: str) -> pd.DataFrame:
     df_stock["title_lower"] = df_stock["title"].str.lower().fillna("")
     df_stock["desc_lower"]  = df_stock["desc_clean"].str.lower().fillna("")
     return df_stock.reset_index(drop=True)
+
+
+# ── Carga stock Cecotec ───────────────────────────────────────────────────────
+@st.cache_data
+def load_stock(path_str: str) -> pd.DataFrame:
+    """Busca stock_cecotec*.csv en el directorio o acepta ruta directa al fichero."""
+    import glob
+    p = Path(path_str.rstrip("/"))
+    if p.suffix == ".csv" and p.exists():
+        candidates = [p]
+    else:
+        candidates = sorted(glob.glob(str(p / "stock_cecotec*.csv")))
+    if not candidates:
+        return pd.DataFrame()
+    df = pd.read_csv(str(candidates[0]), encoding="latin-1", sep=";", quoting=3, on_bad_lines="skip")
+    for col in ["Stock Operativo", "Mar", "Puerto"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
+    df["Referencia"] = df["Referencia"].astype(str).str.strip()
+    return df[["Referencia", "Stock Operativo", "Mar", "Puerto"]].drop_duplicates("Referencia")
 
 # ── Carga Keepa (sin límite de 100) ──────────────────────────────────────────
 @st.cache_data
@@ -272,11 +293,22 @@ def find_best_match_local(ref: dict, df_cec: pd.DataFrame) -> dict:
     }
 
 # ── Render resultados ─────────────────────────────────────────────────────────
-def render_results(results):
+
+def get_stock_row(ref_str: str, df_stk):
+    if df_stk is None or df_stk.empty or not ref_str:
+        return None
+    r = df_stk[df_stk["Referencia"] == str(ref_str).strip()]
+    return r.iloc[0] if not r.empty else None
+
+def render_results(results, df_stk=None):
     rows, encontrados, ahorro_total = [], 0, 0.0
     for r in results:
         ref, alt = r["ref"], r["alt"]
         titulo = ref.get("titulo","")
+        stk = get_stock_row(alt.get("cecotec_referencia",""), df_stk)
+        st_op  = int(stk["Stock Operativo"]) if stk is not None else None
+        st_mar = int(stk["Mar"])             if stk is not None else None
+        st_pto = int(stk["Puerto"])          if stk is not None else None
         if alt.get("no_encontrado"):
             rows.append({
                 "ASIN": ref.get("asin",""),
@@ -287,6 +319,7 @@ def render_results(results):
                 "Alternativa Cecotec": "❌ " + alt.get("motivo","")[:70],
                 "Precio Cecotec (€)": None, "Ahorro (€)": None,
                 "Prestaciones":"—","Ref. Cecotec":"—","URL Cecotec":"",
+                "Stock Operativo": None, "Stock Mar": None, "Stock Puerto": None,
             })
         else:
             encontrados += 1
@@ -305,6 +338,9 @@ def render_results(results):
                 "Prestaciones": pmap.get(alt.get("prestaciones",""), alt.get("prestaciones","")),
                 "Ref. Cecotec": alt.get("cecotec_referencia",""),
                 "URL Cecotec": alt.get("cecotec_url",""),
+                "Stock Operativo": st_op,
+                "Stock Mar": st_mar,
+                "Stock Puerto": st_pto,
             })
 
     df_res = pd.DataFrame(rows)
@@ -316,10 +352,13 @@ def render_results(results):
     </div>""", unsafe_allow_html=True)
 
     st.dataframe(df_res, use_container_width=True, hide_index=True, column_config={
-        "Precio comp. (€)":  st.column_config.NumberColumn(format="%.2f €"),
-        "Precio Cecotec (€)":st.column_config.NumberColumn(format="%.2f €"),
-        "Ahorro (€)":        st.column_config.NumberColumn(format="%.2f €"),
-        "URL Cecotec":       st.column_config.LinkColumn("URL Cecotec"),
+        "Precio comp. (€)":   st.column_config.NumberColumn(format="%.2f €"),
+        "Precio Cecotec (€)": st.column_config.NumberColumn(format="%.2f €"),
+        "Ahorro (€)":         st.column_config.NumberColumn(format="%.2f €"),
+        "URL Cecotec":        st.column_config.LinkColumn("URL Cecotec"),
+        "Stock Operativo":    st.column_config.NumberColumn("Stock Disponible", format="%d uds"),
+        "Stock Mar":          st.column_config.NumberColumn("Stock Mar", format="%d uds"),
+        "Stock Puerto":       st.column_config.NumberColumn("Stock Puerto", format="%d uds"),
     })
     st.download_button("⬇️ Descargar CSV", df_res.to_csv(index=False).encode("utf-8"),
                        "comparativa_cecotec.csv","text/csv", use_container_width=True)
@@ -396,22 +435,49 @@ else:
     df_cecotec = load_cecotec_feed(str(UPLOAD_DIR))
 
 df_keepa = load_keepa_files(str(UPLOAD_DIR))
+_stock_path = st.session_state.get("stock_path")
+if _stock_path and Path(_stock_path).exists():
+    df_stock_data = load_stock(_stock_path)
+else:
+    df_stock_data = load_stock(str(UPLOAD_DIR))
 
 # Status bar
 feed_ok  = not df_cecotec.empty
 keepa_ok = not df_keepa.empty
-c1, c2, c3 = st.columns(3)
+c1, c2, c3, c4, c5 = st.columns([3,3,2,2,1])
 with c1:
     if feed_ok: st.success(f"✅ Feed Cecotec: **{len(df_cecotec):,}** productos en stock")
     else:       st.error("❌ Feed Cecotec no cargado")
 with c2:
     if keepa_ok:
         df_rel = df_keepa[df_keepa["_cecotec_relevant"]]
-        st.success(f"✅ Keepa: **{len(df_rel)}** productos relevantes (de {len(df_keepa)} totales)")
+        st.success(f"✅ Keepa: **{len(df_rel)}** relevantes de **{len(df_keepa)}** totales")
     else:
         st.warning("⚠️ Archivos Keepa no encontrados")
 with c3:
-    st.info("⚡ **Matching local** · Sin IA · Sin scraping · Instantáneo")
+    stock_ok = not df_stock_data.empty
+    if stock_ok:
+        st.success(f"✅ Stock: **{len(df_stock_data):,}** refs")
+    else:
+        st.warning("⚠️ Stock no cargado")
+        stock_up = st.file_uploader("stock_cecotec.csv", type=["csv"], key="stock_up", label_visibility="collapsed")
+        if stock_up:
+            import tempfile
+            tmp = Path(tempfile.mkdtemp()) / "stock_cecotec.csv"
+            tmp.write_bytes(stock_up.read())
+            st.session_state["stock_path"] = str(tmp)
+            st.rerun()
+with c4:
+    st.info("⚡ **Matching local** · Sin IA")
+with c5:
+    if st.button("🗑️", help="Limpiar caché — fuerza recarga de todos los ficheros"):
+        load_cecotec_feed.clear()
+        load_keepa_files.clear()
+        load_stock.clear()
+        for k in ["results","results_custom","results_manual","feed_path","stock_path"]:
+            st.session_state.pop(k, None)
+        st.success("Caché limpiado")
+        st.rerun()
 
 # Feed uploader si no está cargado
 if not feed_ok:
@@ -537,10 +603,10 @@ with tab_manual:
                     alt = find_best_match_local(amz_data, df_cecotec)
                     result = [{"ref": amz_data, "alt": alt}]
                     st.session_state["results_manual"] = result
-                render_results(result)
+                render_results(result, df_stk=df_stock_data)
 
     elif "results_manual" in st.session_state:
-        render_results(st.session_state["results_manual"])
+        render_results(st.session_state["results_manual"], df_stk=df_stock_data)
 
 # ═══ TAB 3 · FICHERO ══════════════════════════════════════════════════════════
 with tab_fichero:
@@ -581,7 +647,7 @@ with tab_resultados:
     if not res_key:
         st.info("Ejecuta una búsqueda en alguna de las pestañas anteriores.")
     else:
-        render_results(st.session_state[res_key])
+        render_results(st.session_state[res_key], df_stk=df_stock_data)
 
 # ═══ TAB 5 · FEED ═════════════════════════════════════════════════════════════
 with tab_feed:
