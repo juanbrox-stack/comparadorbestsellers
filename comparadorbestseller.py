@@ -110,6 +110,22 @@ CAT_MAP = {
     "masajeadores":                  ["masajeadores"],
     "freidoras sin aceite":          ["freidoras sin aceite"],
     "aspiradoras verticales":        ["aspiradores verticales"],
+    # Categorías adicionales Hogar
+    "ventiladores de techo":         ["ventiladores de techo"],
+    "microondas sencillos":          ["microondas de sobremesa"],
+    "cafeteras individuales":        ["cafeteras express","cafeteras"],
+    "deshumidificadores":            ["deshumidificadores"],
+    "sartenes para freír":           ["sartenes","utensilios de cocina"],
+    "juegos de sartenes":            ["sartenes","utensilios de cocina"],
+    "hervidores":                    ["hervidores"],
+    "robots de cocina":              ["robots de cocina"],
+    "lavavajillas":                  ["lavavajillas"],
+    "lavadoras":                     ["lavadoras"],
+    "frigoríficos":                  ["frigoríficos combi","frigoríficos americanos"],
+    "minibar":                       ["minibar / mini nevera"],
+    "campanas extractoras":          ["campanas extractoras"],
+    "vinotecas":                     ["vinoteca"],
+    "hornos":                        ["hornos integrables","microondas de sobremesa"],
 }
 
 # ── Carga feed Cecotec ────────────────────────────────────────────────────────
@@ -172,7 +188,7 @@ def _process_keepa(df: pd.DataFrame) -> pd.DataFrame:
         if col not in df.columns: df[col] = ""
     if "ranking" in df.columns:
         df = df.sort_values("ranking")
-    # Mark relevance
+    # No limit — process ALL products
     df["_cecotec_relevant"] = df["subcategoria"].apply(
         lambda s: str(s).lower().strip() in CAT_MAP
     )
@@ -428,8 +444,8 @@ with tab_keepa:
         df_skipped  = df_keepa[~df_keepa["_cecotec_relevant"]].copy()
         st.markdown('<div class="cec-section-title">📊 Bestsellers Amazon · Análisis de competencia</div>', unsafe_allow_html=True)
         st.markdown(f"""<div class="kpi-row">
-          <div class="kpi"><div class="val">{len(df_keepa[df_keepa['_source']=='Hogar'])}</div><div class="lbl">Total Hogar</div></div>
-          <div class="kpi"><div class="val">{len(df_keepa[df_keepa['_source']=='Belleza'])}</div><div class="lbl">Total Belleza</div></div>
+          <div class="kpi"><div class="val">{len(df_keepa[df_keepa['_source']=='Hogar']):,}</div><div class="lbl">Productos Hogar</div></div>
+          <div class="kpi"><div class="val">{len(df_keepa[df_keepa['_source']=='Belleza']):,}</div><div class="lbl">Productos Belleza</div></div>
           <div class="kpi"><div class="val">{len(df_relevant)}</div><div class="lbl">Con equiv. Cecotec</div></div>
           <div class="kpi"><div class="val">{len(df_skipped)}</div><div class="lbl">Sin cobertura</div></div>
         </div>""", unsafe_allow_html=True)
