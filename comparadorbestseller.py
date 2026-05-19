@@ -114,7 +114,8 @@ CECOTEC_CATS = {
 # ── Carga feed Cecotec ────────────────────────────────────────────────────────
 @st.cache_data
 def load_cecotec_feed(upload_dir: str) -> pd.DataFrame:
-    path = Path(upload_dir) / FEED_FILE
+    p = Path(upload_dir.rstrip("/"))
+    path = p if p.suffix in (".xlsx",".xls") else p / FEED_FILE
     if not path.exists():
         return pd.DataFrame()
     df = pd.read_excel(path)
@@ -392,7 +393,12 @@ def run_search(df_to_process, df_cecotec):
 
 # ── Load data ─────────────────────────────────────────────────────────────────
 UPLOAD_DIR = Path(__file__).parent
-df_cecotec = load_cecotec_feed(str(UPLOAD_DIR))
+# Use session feed path if uploaded via UI, else look in project folder
+_feed_path = st.session_state.get("feed_path")
+if _feed_path and Path(_feed_path).exists():
+    df_cecotec = load_cecotec_feed(_feed_path)
+else:
+    df_cecotec = load_cecotec_feed(str(UPLOAD_DIR))
 df_keepa   = load_keepa_files(str(UPLOAD_DIR))
 
 # Feed status bar
@@ -415,8 +421,21 @@ with col_f3:
     st.info(f"⚡ Modo: **Sin scraping** · Matching local + IA")
 
 if not feed_ok:
-    st.error("Sube `feed_Espan_a.xlsx` a la carpeta del proyecto para continuar.")
-    st.stop()
+    st.markdown('<div class="cec-section-title">📂 Subir catálogo Cecotec</div>', unsafe_allow_html=True)
+    st.info("Sube el fichero `feed_Espan_a.xlsx` para iniciar la app. Solo se hace una vez — queda en memoria de sesión.")
+    feed_upload = st.file_uploader("feed_Espan_a.xlsx", type=["xlsx","xls"], key="feed_upload")
+    if feed_upload:
+        with st.spinner("Cargando catálogo Cecotec…"):
+            import tempfile, shutil
+            tmp = Path(tempfile.mkdtemp()) / "feed_Espan_a.xlsx"
+            tmp.write_bytes(feed_upload.read())
+            df_cecotec = load_cecotec_feed(str(tmp.parent) + "/")
+            # Guardar ruta temporal en session para persistencia dentro de la sesión
+            st.session_state["feed_path"] = str(tmp)
+        st.success(f"✅ Catálogo cargado: {len(df_cecotec):,} productos en stock")
+        st.rerun()
+    else:
+        st.stop()
 
 # ── TABS ──────────────────────────────────────────────────────────────────────
 tab_keepa, tab_manual, tab_fichero, tab_resultados, tab_feed = st.tabs([
