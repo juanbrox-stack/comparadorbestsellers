@@ -78,10 +78,10 @@ CAT_MAP = {
     "aspiradoras con bolsa":         (["aspiradores de trineo"], [], ["repuesto","bolsa","filtro"]),
     # ── Planchado ─────────────────────────────────────────────────────────────
     # Plancha horizontal ≠ plancha vertical/cepillo vapor
-    "planchas de vapor":             (["planchas de vapor"], ["ironhero","plancha"], ["vertical","viaje","vaporeta","repuesto","suela","depósito"]),
+    "planchas de vapor":             (["planchas de vapor","centro de planchado"], [], ["vertical","viaje","vaporeta","repuesto","suela","depósito","filtro"]),
     "centros de planchado":          (["centro de planchado"], [], ["repuesto","funda","tabla"]),
-    "planchas de vapor verticales para viaje": (["planchas verticales"], ["vertical","viaje"], ["repuesto","suela","depósito"]),
-    "cepillos de vapor":             (["planchas verticales","vaporetas"], ["vertical","vapor","cepillo"], ["repuesto","suela"]),
+    "planchas de vapor verticales para viaje": (["planchas verticales","vaporetas"], [], ["repuesto","suela","depósito","filtro"]),
+    "cepillos de vapor":             (["vaporetas","planchas verticales"], [], ["repuesto","suela","filtro"]),
     # ── Cocina ────────────────────────────────────────────────────────────────
     "freidoras de aire":             (["freidoras sin aceite"], [], ["repuesto","accesorio","bandeja","molde","papel","bolsa"]),
     "freidoras":                     (["freidoras sin aceite"], [], ["repuesto","accesorio","papel","bolsa"]),
@@ -308,10 +308,30 @@ def find_best_match_local(ref: dict, df_cec: pd.DataFrame) -> dict:
     # 6. Score: solapamiento de palabras entre ref y título/desc Cecotec
     #    Bonus por rango de precio similar al competidor
     ref_words = set(re.findall(r'\w{4,}', texto_ref))
+
+    # Subtype keywords: if ref mentions these, reward Cecotec products that also mention them
+    SUBTYPE_PAIRS = [
+        (["cepillo","cabezal","reversible","pelusas"], ["cepillo","hidrosteam","hydrosteam","vapor"]),
+        (["vertical","colgar","colgante"], ["vertical","ironhero","hydrosteam"]),
+        (["viaje","portatil","compacto","plegable"], ["viaje","folding","compacto"]),
+        (["horizontal","suela","golpe vapor"], ["ironhero","plancha","suela"]),
+        (["robot","autonomo","mapeado"], ["conga","robot"]),
+        (["escoba","palo","inalambric"], ["rockstar","scoba","conga"]),
+        (["freidora","air fryer","sin aceite"], ["cecofry","airfry","freido"]),
+    ]
+
     def score_row(row):
         haystack = row["title_lower"] + " " + row["desc_lower"]
         kw_score = sum(1 for w in ref_words if w in haystack)
-        # Bonus: precio en rango 40-100% del precio de referencia = producto comparable
+        # Subtype bonus
+        for ref_kws, cec_kws in SUBTYPE_PAIRS:
+            ref_match = any(k in texto_ref for k in ref_kws)
+            cec_match = any(k in haystack for k in cec_kws)
+            if ref_match and cec_match:
+                kw_score += 3
+            elif ref_match and not cec_match:
+                kw_score -= 1  # slight penalty for subtype mismatch
+        # Bonus: precio en rango 40-100% del precio de referencia
         p = row["precio_final"]
         price_bonus = 2 if (precio_ref * 0.4 <= p <= precio_ref) else 0
         return kw_score + price_bonus
