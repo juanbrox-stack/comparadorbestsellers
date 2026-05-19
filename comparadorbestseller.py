@@ -360,8 +360,188 @@ def render_results(results, df_stk=None):
         "Stock Mar":          st.column_config.NumberColumn("Stock Mar", format="%d uds"),
         "Stock Puerto":       st.column_config.NumberColumn("Stock Puerto", format="%d uds"),
     })
-    st.download_button("⬇️ Descargar CSV", df_res.to_csv(index=False).encode("utf-8"),
-                       "comparativa_cecotec.csv","text/csv", use_container_width=True)
+    # ── Export buttons ──────────────────────────────────────────────────────
+    import io
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+
+    def build_excel(df: pd.DataFrame) -> bytes:
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Comparativa Cecotec"
+
+        # Brand colors
+        BLK   = "FF141413"
+        BLUE  = "FF3EB1C8"
+        WHITE = "FFFFFFFF"
+        LGREY = "FFF5F5F3"
+        thin  = Side(style="thin", color="FFD0D0CC")
+        border = Border(top=thin, left=thin, right=thin, bottom=thin)
+
+        # Header row
+        headers = list(df.columns)
+        for ci, h in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=ci, value=h)
+            cell.font      = Font(bold=True, color=WHITE, name="Arial", size=9)
+            cell.fill      = PatternFill("solid", start_color=BLK)
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            cell.border    = border
+        ws.row_dimensions[1].height = 30
+
+        # Data rows
+        for ri, row_data in enumerate(df.itertuples(index=False), 2):
+            fill = PatternFill("solid", start_color=LGREY if ri % 2 == 0 else WHITE)
+            for ci, val in enumerate(row_data, 1):
+                cell = ws.cell(row=ri, column=ci, value=val)
+                cell.font      = Font(name="Arial", size=9)
+                cell.fill      = fill
+                cell.border    = border
+                cell.alignment = Alignment(vertical="center")
+                # Highlight stock columns: red if 0, green if >0
+                col_name = headers[ci-1]
+                if col_name in ("Stock Operativo","Stock Mar","Stock Puerto") and isinstance(val, (int, float)):
+                    if val and val > 0:
+                        cell.fill = PatternFill("solid", start_color="FFD4EDDA")
+                        cell.font = Font(name="Arial", size=9, color="FF155724", bold=True)
+                    elif val == 0:
+                        cell.fill = PatternFill("solid", start_color="FFFCE4EC")
+                        cell.font = Font(name="Arial", size=9, color="FFB71C1C")
+                # URL as hyperlink
+                if col_name == "URL Cecotec" and val and str(val).startswith("http"):
+                    cell.hyperlink = str(val)
+                    cell.value = "🔗 Ver"
+                    cell.font = Font(name="Arial", size=9, color="FF3EB1C8", underline="single")
+
+        # Column widths
+        col_widths = {
+            "ASIN": 14, "Producto competidor": 40, "Marca": 14,
+            "Precio comp. (€)": 13, "Subcategoría": 22,
+            "Alternativa Cecotec": 38, "Precio Cecotec (€)": 13,
+            "Ahorro (€)": 10, "Prestaciones": 12, "Ref. Cecotec": 14,
+            "URL Cecotec": 10, "Stock Operativo": 13, "Stock Mar": 11, "Stock Puerto": 12,
+        }
+        for ci, h in enumerate(headers, 1):
+            ws.column_dimensions[get_column_letter(ci)].width = col_widths.get(h, 15)
+
+        # Freeze header
+        ws.freeze_panes = "A2"
+
+        # Logo row above header
+        ws.insert_rows(1)
+        ws.row_dimensions[1].height = 22
+        logo_cell = ws.cell(row=1, column=1, value="cecotec · Comparador de Competencia")
+        logo_cell.font = Font(bold=True, name="Arial", size=11, color=WHITE)
+        logo_cell.fill = PatternFill("solid", start_color=BLK)
+        logo_cell.alignment = Alignment(horizontal="left", vertical="center")
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(headers))
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        return buf.getvalue()
+
+    def build_pdf(df: pd.DataFrame) -> bytes:
+        from reportlab.lib.pagesizes import A4, landscape
+        from reportlab.lib import colors
+        from reportlab.lib.units import mm
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+
+        buf = io.BytesIO()
+        doc = SimpleDocTemplate(buf, pagesize=landscape(A4),
+                                leftMargin=10*mm, rightMargin=10*mm,
+                                topMargin=12*mm, bottomMargin=10*mm)
+        styles = getSampleStyleSheet()
+        cec_blue  = colors.HexColor("#3EB1C8")
+        cec_black = colors.HexColor("#141413")
+        cec_bg    = colors.HexColor("#FAF9F5")
+
+        title_style = ParagraphStyle("title", parent=styles["Heading1"],
+                                     textColor=cec_black, fontSize=14, spaceAfter=4)
+        sub_style   = ParagraphStyle("sub", parent=styles["Normal"],
+                                     textColor=colors.HexColor("#6b7280"), fontSize=8, spaceAfter=8)
+
+        elements = [
+            Paragraph("cecotec · Comparador de Competencia", title_style),
+            Paragraph(f"Exportado con {len(df)} productos comparados", sub_style),
+            Spacer(1, 4*mm),
+        ]
+
+        # Select key columns for PDF (avoid too wide)
+        pdf_cols = ["Producto competidor","Marca","Precio comp. (€)",
+                    "Alternativa Cecotec","Precio Cecotec (€)","Ahorro (€)",
+                    "Prestaciones","Stock Operativo","Stock Mar","Stock Puerto","URL Cecotec"]
+        pdf_cols = [c for c in pdf_cols if c in df.columns]
+        df_pdf = df[pdf_cols].copy()
+        df_pdf["URL Cecotec"] = df_pdf["URL Cecotec"].apply(
+            lambda x: "Ver →" if str(x).startswith("http") else x)
+
+        col_widths_pdf = {
+            "Producto competidor": 60*mm, "Marca": 22*mm,
+            "Precio comp. (€)": 18*mm, "Alternativa Cecotec": 55*mm,
+            "Precio Cecotec (€)": 18*mm, "Ahorro (€)": 16*mm,
+            "Prestaciones": 18*mm, "Stock Operativo": 18*mm,
+            "Stock Mar": 16*mm, "Stock Puerto": 18*mm, "URL Cecotec": 14*mm,
+        }
+        widths = [col_widths_pdf.get(c, 20*mm) for c in pdf_cols]
+
+        data = [pdf_cols] + [[str(v) if v is not None else "—" for v in row]
+                              for row in df_pdf.itertuples(index=False)]
+
+        table = Table(data, colWidths=widths, repeatRows=1)
+        style = TableStyle([
+            ("BACKGROUND",  (0,0), (-1,0), cec_black),
+            ("TEXTCOLOR",   (0,0), (-1,0), colors.white),
+            ("FONTNAME",    (0,0), (-1,0), "Helvetica-Bold"),
+            ("FONTSIZE",    (0,0), (-1,0), 7),
+            ("ALIGN",       (0,0), (-1,0), "CENTER"),
+            ("FONTNAME",    (0,1), (-1,-1), "Helvetica"),
+            ("FONTSIZE",    (0,1), (-1,-1), 6.5),
+            ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, colors.HexColor("#F5F5F3")]),
+            ("GRID",        (0,0), (-1,-1), 0.3, colors.HexColor("#D0D0CC")),
+            ("VALIGN",      (0,0), (-1,-1), "MIDDLE"),
+            ("TOPPADDING",  (0,0), (-1,-1), 3),
+            ("BOTTOMPADDING",(0,0), (-1,-1), 3),
+            ("LINEBELOW",   (0,0), (-1,0), 2, cec_blue),
+        ])
+        # Color stock cells
+        for ri, row_data in enumerate(df_pdf.itertuples(index=False), 1):
+            for ci, col in enumerate(pdf_cols):
+                if col in ("Stock Operativo","Stock Mar","Stock Puerto"):
+                    val = getattr(row_data, col.replace(" ","_"), None)
+                    try:
+                        v = int(val)
+                        if v > 0:
+                            style.add("BACKGROUND", (ci, ri), (ci, ri), colors.HexColor("#D4EDDA"))
+                            style.add("TEXTCOLOR",  (ci, ri), (ci, ri), colors.HexColor("#155724"))
+                        else:
+                            style.add("BACKGROUND", (ci, ri), (ci, ri), colors.HexColor("#FCE4EC"))
+                            style.add("TEXTCOLOR",  (ci, ri), (ci, ri), colors.HexColor("#B71C1C"))
+                    except: pass
+        table.setStyle(style)
+        elements.append(table)
+        doc.build(elements)
+        return buf.getvalue()
+
+    col_csv, col_xls, col_pdf = st.columns(3)
+    with col_csv:
+        st.download_button("⬇️ CSV", df_res.to_csv(index=False).encode("utf-8"),
+                           "comparativa_cecotec.csv", "text/csv", use_container_width=True)
+    with col_xls:
+        try:
+            st.download_button("⬇️ Excel", build_excel(df_res),
+                               "comparativa_cecotec.xlsx",
+                               "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                               use_container_width=True)
+        except Exception as e:
+            st.warning(f"Excel no disponible: {e}")
+    with col_pdf:
+        try:
+            st.download_button("⬇️ PDF", build_pdf(df_res),
+                               "comparativa_cecotec.pdf", "application/pdf",
+                               use_container_width=True)
+        except Exception as e:
+            st.warning(f"PDF no disponible: {e}")
 
     found = [r for r in results if not r["alt"].get("no_encontrado")]
     if found:
