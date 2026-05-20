@@ -65,68 +65,78 @@ HEADERS = {
 }
 
 # Mapa de categorías Keepa → categorías Cecotec (puede ser lista para cubrir variantes)
+# CAT_MAP: keepa_subcat → (cecotec_cats, required_keywords, excluded_keywords)
+# required_kw: al menos una debe aparecer en título Cecotec (vacío = sin restricción)
+# excluded_kw: ninguna debe aparecer en título (filtra repuestos, accesorios, etc.)
 CAT_MAP = {
-    "aspiradoras escoba":            ["aspiradores verticales"],
-    "aspiradoras de mano":           ["aspiradores de mano"],
-    "robots aspiradores":            ["robots aspiradores"],
-    "aspiradoras para alfombras":    ["aspiradores de trineo"],
-    "aspiradoras con bolsa":         ["aspiradores de trineo"],
-    "freidoras de aire":             ["freidoras sin aceite"],
-    "freidoras":                     ["freidoras sin aceite"],
-    "hornos de sobremesa":           ["microondas de sobremesa","hornos"],
-    "tostadoras":                    ["tostadoras"],
-    "sandwicheras":                  ["sandwicheras","grills"],
-    "grills de contacto":            ["grills","sandwicheras"],
-    "batidoras de mano":             ["batidoras de mano"],
-    "batidoras de vaso":             ["batidoras de vaso"],
-    "procesadores de alimentos":     ["batidoras / picadoras","robots de cocina"],
-    "batidoras amasadoras":          ["amasadoras","robots de cocina"],
-    "cafeteras italianas":           ["cafeteras express","cafeteras"],
-    "cafeteras de filtro":           ["cafeteras de filtro","cafeteras"],
-    "cafeteras espresso":            ["cafeteras express"],
-    "máquinas de café":              ["cafeteras express","cafeteras"],
-    "planchas de vapor":             ["centros de planchado","planchas de vapor"],
-    "planchas de vapor verticales para viaje": ["planchas de vapor","centros de planchado"],
-    "cepillos de vapor":             ["planchas de vapor"],
-    "centros de planchado":          ["centros de planchado"],
-    "balanzas digitales":            ["básculas de cocina","básculas"],
-    "básculas de cocina":            ["básculas de cocina"],
-    "básculas de baño":              ["básculas de baño"],
-    "purificadores de aire":         ["purificadores de aire"],
-    "humidificadores":               ["humidificadores"],
-    "ventiladores":                  ["ventiladores de pie","ventiladores de techo","ventiladores"],
-    "aires acondicionados portátiles":["aires acondicionados"],
-    "televisores":                   ["televisores / smart tv"],
-    "monitores":                     ["monitores"],
-    "altavoces portátiles":          ["altavoces"],
-    "desincrustantes":               ["repuestos cafeteras","accesorios"],
-    "secadores de pelo":             ["secadores de pelo"],
-    "planchas para el pelo":         ["planchas de pelo"],
-    "planchas de pelo":              ["planchas de pelo"],
-    "rizadores":                     ["rizadores"],
-    "cepillos eléctricos para el cabello": ["cepillos alisadores","planchas de pelo"],
-    "afeitadoras eléctricas":        ["afeitadoras","depilación"],
-    "depiladores":                   ["depilación","depiladores"],
-    "cepillos de dientes eléctricos":["cepillos de dientes"],
-    "masajeadores":                  ["masajeadores"],
-    "freidoras sin aceite":          ["freidoras sin aceite"],
-    "aspiradoras verticales":        ["aspiradores verticales"],
-    # Categorías adicionales Hogar
-    "ventiladores de techo":         ["ventiladores de techo"],
-    "microondas sencillos":          ["microondas de sobremesa"],
-    "cafeteras individuales":        ["cafeteras express","cafeteras"],
-    "deshumidificadores":            ["deshumidificadores"],
-    "sartenes para freír":           ["sartenes","utensilios de cocina"],
-    "juegos de sartenes":            ["sartenes","utensilios de cocina"],
-    "hervidores":                    ["hervidores"],
-    "robots de cocina":              ["robots de cocina"],
-    "lavavajillas":                  ["lavavajillas"],
-    "lavadoras":                     ["lavadoras"],
-    "frigoríficos":                  ["frigoríficos combi","frigoríficos americanos"],
-    "minibar":                       ["minibar / mini nevera"],
-    "campanas extractoras":          ["campanas extractoras"],
-    "vinotecas":                     ["vinoteca"],
-    "hornos":                        ["hornos integrables","microondas de sobremesa"],
+    # ── Aspiración ────────────────────────────────────────────────────────────
+    "aspiradoras escoba":            (["aspiradores verticales"], [], ["repuesto","batería","filtro","accesorio"]),
+    "aspiradoras verticales":        (["aspiradores verticales"], [], ["repuesto","batería","filtro"]),
+    "aspiradoras de mano":           (["aspiradores de mano"], [], ["repuesto","batería","filtro"]),
+    "robots aspiradores":            (["robots aspiradores"], [], ["repuesto","filtro","cepillo lateral","mopa"]),
+    "aspiradoras para alfombras":    (["aspiradores de trineo"], [], ["repuesto","bolsa","filtro"]),
+    "aspiradoras con bolsa":         (["aspiradores de trineo"], [], ["repuesto","bolsa","filtro"]),
+    # ── Planchado ─────────────────────────────────────────────────────────────
+    # Plancha horizontal ≠ plancha vertical/cepillo vapor
+    "planchas de vapor":             (["planchas de vapor","centro de planchado"], [], ["vertical","viaje","vaporeta","repuesto","suela","depósito","filtro"]),
+    "centros de planchado":          (["centro de planchado"], [], ["repuesto","funda","tabla"]),
+    "planchas de vapor verticales para viaje": (["planchas verticales","vaporetas"], [], ["repuesto","suela","depósito","filtro"]),
+    "cepillos de vapor":             (["vaporetas","planchas verticales"], [], ["repuesto","suela","filtro"]),
+    # ── Cocina ────────────────────────────────────────────────────────────────
+    "freidoras de aire":             (["freidoras sin aceite"], [], ["repuesto","accesorio","bandeja","molde","papel","bolsa"]),
+    "freidoras":                     (["freidoras sin aceite"], [], ["repuesto","accesorio","papel","bolsa"]),
+    "hornos de sobremesa":           (["microondas de sobremesa"], [], ["repuesto","plato giratorio","bandeja"]),
+    "tostadoras":                    (["tostadoras"], [], ["repuesto"]),
+    "sandwicheras":                  (["sandwicheras","grills"], [], ["repuesto","plancha recambio"]),
+    "grills de contacto":            (["grills","sandwicheras"], [], ["repuesto"]),
+    "batidoras de mano":             (["batidoras de mano"], [], ["repuesto","accesorio","vaso","pie"]),
+    "batidoras de vaso":             (["batidoras de vaso"], [], ["repuesto","jarra","accesorio","cuchilla"]),
+    "procesadores de alimentos":     (["batidoras / picadoras","robots de cocina"], [], ["repuesto","cuchilla","accesorio"]),
+    "batidoras amasadoras":          (["amasadoras","robots de cocina"], [], ["repuesto","accesorio","gancho"]),
+    "cafeteras italianas":           (["cafeteras express"], [], ["repuesto","cápsula","accesorio","filtro","descalcificador"]),
+    "cafeteras de filtro":           (["cafeteras de filtro"], [], ["repuesto","filtro","jarra","descalcificador"]),
+    "cafeteras espresso":            (["cafeteras express"], [], ["repuesto","cápsula","accesorio"]),
+    "máquinas de café":              (["cafeteras express"], [], ["repuesto","cápsula"]),
+    "cafeteras individuales":        (["cafeteras express"], [], ["repuesto","cápsula"]),
+    "hervidores":                    (["hervidores"], [], ["repuesto","filtro"]),
+    "robots de cocina":              (["robots de cocina"], [], ["repuesto","accesorio","cuchilla","vaso"]),
+    "sartenes para freír":           (["sartenes"], [], ["repuesto","mango","tapa"]),
+    "juegos de sartenes":            (["sartenes"], [], ["repuesto"]),
+    # ── Básculas ──────────────────────────────────────────────────────────────
+    "balanzas digitales":            (["básculas de cocina"], [], ["repuesto"]),
+    "básculas de cocina":            (["básculas de cocina"], [], ["repuesto"]),
+    "básculas de baño":              (["básculas de baño"], [], ["repuesto"]),
+    # ── Clima ─────────────────────────────────────────────────────────────────
+    "purificadores de aire":         (["purificadores de aire"], [], ["repuesto","filtro hepa","accesorio"]),
+    "humidificadores":               (["humidificadores"], [], ["repuesto","filtro"]),
+    "ventiladores":                  (["ventiladores de pie","ventiladores de techo"], [], ["repuesto","mando","control"]),
+    "ventiladores de techo":         (["ventiladores de techo"], [], ["repuesto","aspa","mando"]),
+    "aires acondicionados portátiles":(["aires acondicionados"], [], ["repuesto","filtro","mando"]),
+    "deshumidificadores":            (["deshumidificadores"], [], ["repuesto","filtro"]),
+    # ── Audio/Video ───────────────────────────────────────────────────────────
+    "televisores":                   (["televisores / smart tv"], [], ["repuesto","soporte","mando","protector"]),
+    "monitores":                     (["monitores"], [], ["repuesto","soporte","brazo"]),
+    "altavoces portátiles":          (["altavoces"], [], ["repuesto"]),
+    # ── Gran electrodoméstico ─────────────────────────────────────────────────
+    "lavadoras":                     (["lavadoras"], [], ["repuesto","tambor","correa","bomba","goma"]),
+    "lavavajillas":                  (["lavavajillas"], [], ["repuesto","cesta","portavasos"]),
+    "frigoríficos":                  (["frigoríficos combi","frigoríficos americanos"], [], ["repuesto","balda","cajón","junta"]),
+    "minibar":                       (["minibar / mini nevera"], [], ["repuesto"]),
+    "campanas extractoras":          (["campanas extractoras"], [], ["repuesto","filtro","carbón activo"]),
+    "microondas sencillos":          (["microondas de sobremesa"], [], ["repuesto","plato giratorio"]),
+    "hornos":                        (["hornos integrables"], [], ["repuesto","bandeja","rejilla"]),
+    "vinotecas":                     (["vinoteca"], [], ["repuesto"]),
+    # ── Belleza ───────────────────────────────────────────────────────────────
+    "secadores de pelo":             (["secadores de pelo"], [], ["repuesto","difusor","boquilla","accesorio"]),
+    "planchas para el pelo":         (["planchas de pelo"], [], ["repuesto","accesorio"]),
+    "planchas de pelo":              (["planchas de pelo"], [], ["repuesto","accesorio"]),
+    "rizadores":                     (["rizadores"], [], ["repuesto","accesorio"]),
+    "cepillos eléctricos para el cabello": (["cepillos alisadores","planchas de pelo"], [], ["repuesto"]),
+    "afeitadoras eléctricas":        (["afeitadoras","depilación"], [], ["repuesto","cabezal","lámina","accesorio"]),
+    "depiladores":                   (["depilación","depiladores"], [], ["repuesto","cabezal","accesorio"]),
+    "cepillos de dientes eléctricos":(["cepillos de dientes"], [], ["repuesto","cabezal recambio","funda"]),
+    "masajeadores":                  (["masajeadores"], [], ["repuesto","accesorio"]),
+    "freidoras sin aceite":          (["freidoras sin aceite"], [], ["repuesto","accesorio","papel","bandeja"]),
 }
 
 # ── Carga feed Cecotec ────────────────────────────────────────────────────────
@@ -207,6 +217,9 @@ def _process_keepa(df: pd.DataFrame) -> pd.DataFrame:
     for col in ["asin","titulo","precio","subcategoria","ranking","fabricante",
                 "url_amazon","feat1","feat2","feat3","feat4","descripcion_breve"]:
         if col not in df.columns: df[col] = ""
+    # Excluir productos propios Cecotec (solo interesan competidores)
+    if "fabricante" in df.columns:
+        df = df[~df["fabricante"].str.lower().str.contains("cecotec", na=False)].copy()
     if "ranking" in df.columns:
         df = df.sort_values("ranking")
     # No limit — process ALL products
@@ -221,76 +234,305 @@ def _process_keepa(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 # ── Matching local 100% pandas ────────────────────────────────────────────────
-def find_best_match_local(ref: dict, df_cec: pd.DataFrame) -> dict:
-    precio_ref  = float(ref.get("precio") or 0)
-    subcat_ref  = str(ref.get("subcategoria","")).lower().strip()
-    titulo_ref  = str(ref.get("titulo","")).lower()
-    feats_ref   = str(ref.get("caracteristicas","")).lower()
+def _extract_specs(text: str) -> dict:
+    """Extract numeric specs from a description string."""
+    text = text.lower()
+    specs = {}
+    # Watts
+    m = re.search(r'(\d[\d.,]+)\s*w\b', text)
+    if m: specs["w"] = float(m.group(1).replace(",","."))
+    # Pressure Pa/kPa
+    m = re.search(r'(\d[\d.,]+)\s*kpa', text)
+    if m: specs["kpa"] = float(m.group(1).replace(",","."))
+    m = re.search(r'(\d[\d.,]+)\s*pa\b', text)
+    if m: specs["pa"] = float(m.group(1).replace(",","."))
+    # Steam g/min
+    m = re.search(r'(\d[\d.,]+)\s*g/min', text)
+    if m: specs["g_min"] = float(m.group(1).replace(",","."))
+    # Capacity L
+    m = re.search(r'(\d[\d.,]+)\s*l\b', text)
+    if m: specs["litros"] = float(m.group(1).replace(",","."))
+    # Autonomy min
+    m = re.search(r'(\d+)\s*min', text)
+    if m: specs["minutos"] = int(m.group(1))
+    # Temperature
+    m = re.search(r'(\d+)\s*º|(\d+)\s*grados', text)
+    if m: specs["temp"] = int((m.group(1) or m.group(2)))
+    return specs
 
-    # 1. Get Cecotec categories for this Keepa subcategory
-    cec_cats = CAT_MAP.get(subcat_ref, [])
-    if not cec_cats:
-        # Fuzzy fallback: find any partial word match
-        words = [w for w in re.findall(r'\w{5,}', subcat_ref)]
-        cec_cats = [c for c in df_cec["cat_lower"].unique()
-                    if any(w in c for w in words)][:3]
+def _build_conclusion(ref: dict, row, precio_ref: float, precio_cec: float, prestaciones: str) -> str:
+    """Generate a human-readable conclusion explaining the verdict."""
+    ahorro = precio_ref - precio_cec
+    pct    = (ahorro / precio_ref * 100) if precio_ref > 0 else 0
+
+    ref_text = (str(ref.get("titulo","")) + " " + str(ref.get("caracteristicas",""))).lower()
+    cec_text = (str(row["title"]) + " " + str(row["desc_clean"])).lower()
+
+    ref_specs = _extract_specs(ref_text)
+    cec_specs = _extract_specs(cec_text)
+
+    puntos_favor    = []
+    puntos_contra   = []
+    puntos_neutros  = []
+
+    # ── Precio ────────────────────────────────────────────────────────────────
+    if ahorro > 0:
+        puntos_favor.append(f"precio {ahorro:.2f}€ más barato ({pct:.0f}% de ahorro)")
+    elif ahorro < 0:
+        puntos_contra.append(f"precio {abs(ahorro):.2f}€ más caro que el competidor")
+
+    # ── Potencia W ────────────────────────────────────────────────────────────
+    if "w" in ref_specs and "w" in cec_specs:
+        diff_w = cec_specs["w"] - ref_specs["w"]
+        if diff_w >= 200:
+            puntos_favor.append(f"mayor potencia ({int(cec_specs['w'])}W vs {int(ref_specs['w'])}W)")
+        elif diff_w <= -200:
+            puntos_contra.append(f"menor potencia ({int(cec_specs['w'])}W vs {int(ref_specs['w'])}W)")
+        else:
+            puntos_neutros.append(f"potencia similar ({int(cec_specs['w'])}W)")
+
+    # ── Presión kPa/Pa ─────────────────────────────────────────────────────
+    for key, label in [("kpa","kPa"), ("pa","Pa")]:
+        if key in ref_specs and key in cec_specs:
+            diff = cec_specs[key] - ref_specs[key]
+            if diff >= ref_specs[key] * 0.1:
+                puntos_favor.append(f"mayor succión ({cec_specs[key]:.0f} {label} vs {ref_specs[key]:.0f})")
+            elif diff <= -ref_specs[key] * 0.1:
+                puntos_contra.append(f"menor succión ({cec_specs[key]:.0f} {label} vs {ref_specs[key]:.0f})")
+
+    # ── Vapor g/min ────────────────────────────────────────────────────────
+    if "g_min" in ref_specs and "g_min" in cec_specs:
+        diff = cec_specs["g_min"] - ref_specs["g_min"]
+        if diff >= 5:
+            puntos_favor.append(f"más vapor ({cec_specs['g_min']:.0f} g/min vs {ref_specs['g_min']:.0f})")
+        elif diff <= -5:
+            puntos_contra.append(f"menos vapor ({cec_specs['g_min']:.0f} g/min vs {ref_specs['g_min']:.0f})")
+        else:
+            puntos_neutros.append(f"vapor similar ({cec_specs['g_min']:.0f} g/min)")
+
+    # ── Capacidad ─────────────────────────────────────────────────────────
+    if "litros" in ref_specs and "litros" in cec_specs:
+        diff = cec_specs["litros"] - ref_specs["litros"]
+        if diff >= 0.3:
+            puntos_favor.append(f"mayor capacidad ({cec_specs['litros']:.1f}L vs {ref_specs['litros']:.1f}L)")
+        elif diff <= -0.3:
+            puntos_contra.append(f"menor capacidad ({cec_specs['litros']:.1f}L vs {ref_specs['litros']:.1f}L)")
+
+    # ── Autonomía ──────────────────────────────────────────────────────────
+    if "minutos" in ref_specs and "minutos" in cec_specs:
+        diff = cec_specs["minutos"] - ref_specs["minutos"]
+        if diff >= 10:
+            puntos_favor.append(f"más autonomía ({cec_specs['minutos']} min vs {ref_specs['minutos']} min)")
+        elif diff <= -10:
+            puntos_contra.append(f"menos autonomía ({cec_specs['minutos']} min vs {ref_specs['minutos']} min)")
+
+    # ── Funcionalidades clave ──────────────────────────────────────────────
+    features_check = [
+        (["wifi","connected","app","smart"], "conectividad WiFi/App"),
+        (["hepa","h13","h14"], "filtro HEPA"),
+        (["autovacío","auto-vaciado","vaciado automático"], "vaciado automático"),
+        (["display","pantalla","lcd"], "pantalla/display"),
+        (["inox","acero inoxidable"], "acabado inox"),
+        (["sin bolsa","sin cable","inalámbric"], "sin cable/bolsa"),
+        (["golpe vapor","boost","turbo"], "función turbo/golpe vapor"),
+        (["doble voltaje","voltaje universal"], "doble voltaje"),
+    ]
+    for kws, label in features_check:
+        ref_has = any(k in ref_text for k in kws)
+        cec_has = any(k in cec_text for k in kws)
+        if ref_has and cec_has:
+            puntos_neutros.append(f"ambos con {label}")
+        elif not ref_has and cec_has:
+            puntos_favor.append(f"incorpora {label} (el competidor no)")
+        elif ref_has and not cec_has:
+            puntos_contra.append(f"sin {label} (el competidor sí lo tiene)")
+
+    # ── Categoría diferente ────────────────────────────────────────────────
+    ref_subcat = str(ref.get("subcategoria","")).lower()
+    cec_cat    = str(row["categories"]).lower()
+    CAT_DIFF_NOTES = {
+        ("cepillos de vapor", "vaporeta"): "es una vaporeta de mano, no un cepillo de vapor específico",
+        ("planchas de vapor verticales para viaje", "planchas verticales"): "plancha vertical, función similar para viaje",
+        ("procesadores de alimentos", "batidoras"): "batidora/picadora, funciones similares aunque sin todos los accesorios",
+    }
+    for (ref_k, cec_k), nota in CAT_DIFF_NOTES.items():
+        if ref_k in ref_subcat and cec_k in cec_cat:
+            puntos_neutros.append(nota)
+
+    # ── Construir texto final ──────────────────────────────────────────────
+    partes = []
+    if prestaciones == "mejor":
+        partes.append("**✅ Cecotec es mejor opción** porque")
+        items = puntos_favor[:3]
+        if puntos_contra:
+            items_contra = puntos_contra[:1]
+        else:
+            items_contra = []
+    elif prestaciones == "peor":
+        partes.append("**🔴 Cecotec es inferior** ya que")
+        items = puntos_contra[:3]
+        items_contra = []
+    else:
+        partes.append("**🟡 Prestaciones equivalentes**:")
+        items = puntos_favor[:2] + puntos_neutros[:2]
+        items_contra = puntos_contra[:1]
+
+    if items:
+        partes.append(", ".join(items))
+    if items_contra:
+        partes.append(f"aunque {', '.join(items_contra)}")
+    if puntos_neutros and prestaciones == "igual" and not items:
+        partes.append(", ".join(puntos_neutros[:2]))
+
+    conclusion = " ".join(partes)
+    if not conclusion.strip() or conclusion.strip() in ("**✅ Cecotec es mejor opción** porque", "**🟡 Prestaciones equivalentes**:", "**🔴 Cecotec es inferior** ya que"):
+        # Fallback genérico
+        if prestaciones == "mejor":
+            conclusion = f"**✅ Mejor opción:** precio {ahorro:.2f}€ más barato ({pct:.0f}% ahorro) en la misma categoría"
+        elif prestaciones == "peor":
+            conclusion = f"**🔴 Precio mayor** que el competidor en {abs(ahorro):.2f}€, pero Cecotec con garantía y servicio directo"
+        else:
+            conclusion = f"**🟡 Alternativa equivalente** a menor precio ({ahorro:.2f}€ de ahorro)"
+
+    return conclusion
+
+def _make_alt(row, precio_ref, ref=None):
+    precio_cec = float(row["precio_final"])
+    ahorro = round(precio_ref - precio_cec, 2) if precio_ref > 0 else 0.0
+    prestaciones = "igual"
+    if ahorro > precio_ref * 0.25:
+        prestaciones = "mejor"
+    elif precio_cec > precio_ref:
+        prestaciones = "peor"
+    conclusion = _build_conclusion(ref or {}, row, precio_ref, precio_cec, prestaciones)
+    return {
+        "cecotec_nombre":         row["title"],
+        "cecotec_precio":         precio_cec,
+        "cecotec_precio_original": float(row["price"]) if row["price"] != row["precio_final"] else None,
+        "cecotec_caracteristicas": row["desc_clean"][:200],
+        "cecotec_url":            row["link"],
+        "cecotec_referencia":     str(row.get("mpn","") or ""),
+        "cecotec_stock":          True,
+        "cecotec_categoria":      row["categories"],
+        "cecotec_imagen":         row.get("image_link",""),
+        "ahorro_eur":             ahorro,
+        "prestaciones":           prestaciones,
+        "justificacion":          conclusion,
+    }
+
+def find_best_match_local(ref: dict, df_cec: pd.DataFrame) -> dict:
+    precio_ref = float(ref.get("precio") or 0)
+    subcat_ref = str(ref.get("subcategoria","")).lower().strip()
+    titulo_ref = str(ref.get("titulo","")).lower()
+    feats_ref  = str(ref.get("caracteristicas","")).lower()
+    texto_ref  = titulo_ref + " " + feats_ref
+
+    # 1. Obtener categorías + filtros del mapa
+    map_entry = CAT_MAP.get(subcat_ref)
+    if map_entry:
+        cec_cats, req_kw, exc_kw = map_entry
+    else:
+        # Fallback fuzzy
+        words = re.findall(r'\w{5,}', subcat_ref)
+        cec_cats = [c for c in df_cec["cat_lower"].unique() if any(w in c for w in words)][:3]
+        req_kw, exc_kw = [], []
+
     if not cec_cats:
         return {"no_encontrado": True, "motivo": f"Categoría '{subcat_ref}' sin equivalente en Cecotec"}
 
-    # 2. Filter by category
-    mask_cat = df_cec["cat_lower"].apply(lambda c: any(cc in c for cc in cec_cats))
-    df_cat = df_cec[mask_cat].copy()
+    # 2. Filtrar por categoría
+    mask_cat = df_cec["cat_lower"].apply(lambda c: any(cc.lower() in c for cc in cec_cats))
+    df_f = df_cec[mask_cat].copy()
+    if df_f.empty:
+        return {"no_encontrado": True, "motivo": f"Sin productos en: {', '.join(cec_cats)}"}
 
-    if df_cat.empty:
-        return {"no_encontrado": True, "motivo": f"Sin productos Cecotec en categorías: {', '.join(cec_cats)}"}
+    # 3. Aplicar exclusiones (repuestos, accesorios, etc.)
+    if exc_kw:
+        exc_pattern = "|".join(exc_kw)
+        df_f = df_f[~df_f["title_lower"].str.contains(exc_pattern, na=False)]
 
-    # 3. Filter by price (cheaper than reference)
+    # 4. Aplicar keywords requeridos (filtro de tipo de producto)
+    if req_kw and not df_f.empty:
+        req_pattern = "|".join(req_kw)
+        df_req = df_f[df_f["title_lower"].str.contains(req_pattern, na=False)]
+        if not df_req.empty:
+            df_f = df_req  # Solo si hay resultados; si no, mantenemos sin filtro
+
+    if df_f.empty:
+        return {"no_encontrado": True, "motivo": "Sin productos del tipo adecuado en Cecotec"}
+
+    # 5. Filtrar más baratos que referencia
     if precio_ref > 0:
-        df_cheap = df_cat[df_cat["precio_final"] < precio_ref].copy()
+        df_cheap = df_f[df_f["precio_final"] < precio_ref].copy()
         if df_cheap.empty:
-            # Relax: allow up to 10% more expensive
-            df_cheap = df_cat[df_cat["precio_final"] <= precio_ref * 1.10].copy()
-        df_cat = df_cheap
+            df_cheap = df_f[df_f["precio_final"] <= precio_ref * 1.15].copy()
+        df_f = df_cheap if not df_cheap.empty else df_f
 
-    if df_cat.empty:
-        return {"no_encontrado": True, "motivo": f"No hay productos Cecotec más baratos en esta categoría"}
+    if df_f.empty:
+        return {"no_encontrado": True, "motivo": "No hay alternativas Cecotec más económicas"}
 
-    # 4. Score by keyword overlap with title + features
-    ref_words = set(re.findall(r'\w{4,}', titulo_ref + " " + feats_ref))
+    # 6. Score: solapamiento de palabras entre ref y título/desc Cecotec
+    #    Bonus por rango de precio similar al competidor
+    ref_words = set(re.findall(r'\w{4,}', texto_ref))
+
+    # Subtype keywords: if ref mentions these, reward Cecotec products that also mention them
+    SUBTYPE_PAIRS = [
+        (["cepillo","cabezal","reversible","pelusas"], ["cepillo","hidrosteam","hydrosteam","vapor"]),
+        (["vertical","colgar","colgante"], ["vertical","ironhero","hydrosteam"]),
+        (["viaje","portatil","compacto","plegable"], ["viaje","folding","compacto"]),
+        (["horizontal","suela","golpe vapor"], ["ironhero","plancha","suela"]),
+        (["robot","autonomo","mapeado"], ["conga","robot"]),
+        (["escoba","palo","inalambric"], ["rockstar","scoba","conga"]),
+        (["freidora","air fryer","sin aceite"], ["cecofry","airfry","freido"]),
+    ]
+
     def score_row(row):
         haystack = row["title_lower"] + " " + row["desc_lower"]
-        return sum(1 for w in ref_words if w in haystack)
+        kw_score = sum(1 for w in ref_words if w in haystack)
+        # Subtype bonus
+        for ref_kws, cec_kws in SUBTYPE_PAIRS:
+            ref_match = any(k in texto_ref for k in ref_kws)
+            cec_match = any(k in haystack for k in cec_kws)
+            if ref_match and cec_match:
+                kw_score += 3
+            elif ref_match and not cec_match:
+                kw_score -= 1  # slight penalty for subtype mismatch
+        # Bonus: precio en rango 40-100% del precio de referencia
+        p = row["precio_final"]
+        price_bonus = 2 if (precio_ref * 0.4 <= p <= precio_ref) else 0
+        return kw_score + price_bonus
 
-    df_cat = df_cat.copy()
-    df_cat["_score"] = df_cat.apply(score_row, axis=1)
-    df_cat = df_cat.sort_values(["_score","precio_final"], ascending=[False, True])
+    df_f = df_f.copy()
+    df_f["_score"] = df_f.apply(score_row, axis=1)
+    df_f = df_f.sort_values(["_score","precio_final"], ascending=[False, True])
 
-    best = df_cat.iloc[0]
-    precio_cec = float(best["precio_final"])
-    ahorro = round(precio_ref - precio_cec, 2) if precio_ref > 0 else 0.0
+    # 7. Seleccionar 3 alternativas: mejor match (recomendado), más barato, más caro
+    best      = df_f.iloc[0]
+    cheapest  = df_f.sort_values("precio_final").iloc[0]
+    priciest  = df_f.sort_values("precio_final").iloc[-1]
 
-    # Prestaciones heuristic: if Cecotec is cheaper → "igual" by default
-    # (conservative: we don't have full specs to claim "mejor")
-    prestaciones = "igual"
-    if ahorro > precio_ref * 0.2:
-        prestaciones = "mejor"   # significantly cheaper → value win
-    elif precio_cec > precio_ref:
-        prestaciones = "peor"
+    # Intermedio: el más cercano a la mediana de precios
+    median_p  = df_f["precio_final"].median()
+    mid_idx   = (df_f["precio_final"] - median_p).abs().idxmin()
+    middle    = df_f.loc[mid_idx]
 
-    return {
-        "cecotec_nombre":        best["title"],
-        "cecotec_precio":        precio_cec,
-        "cecotec_precio_original": float(best["price"]) if best["price"] != best["precio_final"] else None,
-        "cecotec_caracteristicas": best["desc_clean"][:200],
-        "cecotec_url":           best["link"],
-        "cecotec_referencia":    str(best.get("mpn","") or ""),
-        "cecotec_stock":         True,
-        "cecotec_categoria":     best["categories"],
-        "cecotec_imagen":        best.get("image_link",""),
-        "ahorro_eur":            ahorro,
-        "prestaciones":          prestaciones,
-        "justificacion":         f"Mejor opción en '{best['categories']}' · score={int(best['_score'])}",
-    }
+    # Evitar duplicados entre las 3 opciones
+    seen_refs = set()
+    alternatives = []
+    for label, row in [("⭐ Recomendado", best), ("💰 Más económico", cheapest),
+                        ("🎯 Intermedio", middle), ("🏆 Premium", priciest)]:
+        ref_id = str(row.get("mpn","") or row["title"])
+        if ref_id not in seen_refs:
+            seen_refs.add(ref_id)
+            alt = _make_alt(row, precio_ref, ref=ref)
+            alt["label"] = label
+            alternatives.append(alt)
+        if len(alternatives) == 3:
+            break
+
+    main = alternatives[0]
+    main["alternativas"] = alternatives
+    return main
 
 # ── Render resultados ─────────────────────────────────────────────────────────
 
@@ -319,6 +561,7 @@ def render_results(results, df_stk=None):
                 "Alternativa Cecotec": "❌ " + alt.get("motivo","")[:70],
                 "Precio Cecotec (€)": None, "Ahorro (€)": None,
                 "Prestaciones":"—","Ref. Cecotec":"—","URL Cecotec":"",
+                "Conclusión": "—",
                 "Stock Operativo": None, "Stock Mar": None, "Stock Puerto": None,
             })
         else:
@@ -338,6 +581,7 @@ def render_results(results, df_stk=None):
                 "Prestaciones": pmap.get(alt.get("prestaciones",""), alt.get("prestaciones","")),
                 "Ref. Cecotec": alt.get("cecotec_referencia",""),
                 "URL Cecotec": alt.get("cecotec_url",""),
+                "Conclusión": alt.get("justificacion",""),
                 "Stock Operativo": st_op,
                 "Stock Mar": st_mar,
                 "Stock Puerto": st_pto,
@@ -356,6 +600,7 @@ def render_results(results, df_stk=None):
         "Precio Cecotec (€)": st.column_config.NumberColumn(format="%.2f €"),
         "Ahorro (€)":         st.column_config.NumberColumn(format="%.2f €"),
         "URL Cecotec":        st.column_config.LinkColumn("URL Cecotec"),
+        "Conclusión":         st.column_config.TextColumn("Conclusión", width="large"),
         "Stock Operativo":    st.column_config.NumberColumn("Stock Disponible", format="%d uds"),
         "Stock Mar":          st.column_config.NumberColumn("Stock Mar", format="%d uds"),
         "Stock Puerto":       st.column_config.NumberColumn("Stock Puerto", format="%d uds"),
@@ -549,41 +794,53 @@ def render_results(results, df_stk=None):
         st.markdown('<div class="cec-section-title">🔎 Detalle por producto</div>', unsafe_allow_html=True)
         for r in found:
             ref, alt = r["ref"], r["alt"]
-            prest = alt.get("prestaciones","")
-            tag_css   = {"mejor":"tag-mejor","igual":"tag-igual","peor":"tag-peor"}.get(prest,"tag-skip")
-            tag_label = {"mejor":"✅ Mejor precio y valor","igual":"🟡 Equivalente","peor":"🔴 Inferior"}.get(prest,prest)
-            ahorro = float(alt.get("ahorro_eur") or 0)
+            alternatives = alt.get("alternativas", [alt])
+            main_alt = alternatives[0]
+            ahorro = float(main_alt.get("ahorro_eur") or 0)
             with st.expander(
-                f"**{ref.get('titulo','')[:60]}** · {ref.get('precio','')}€  →  "
-                f"**{alt.get('cecotec_nombre','')[:50]}** · {alt.get('cecotec_precio','')}€"
+                f"**{ref.get('titulo','')[:55]}** · {ref.get('precio','')}€  →  "
+                f"**{main_alt.get('cecotec_nombre','')[:45]}** · {main_alt.get('cecotec_precio','')}€"
                 + (f"  💰 -{ahorro:.2f}€" if ahorro > 0 else "")
             ):
-                c1, mid, c2 = st.columns([5,1,5])
+                # Left: competitor product
+                c1, mid, c2 = st.columns([4,1,7])
                 with c1:
                     st.markdown("##### 📦 Producto competidor")
                     st.markdown(f"**{ref.get('titulo','')}**")
                     st.markdown(f"*{ref.get('fabricante','')}* · {ref.get('subcategoria','')}")
                     st.markdown(f"💶 **{ref.get('precio','')} €**")
-                    st.markdown(f"_{ref.get('caracteristicas','')[:300]}_")
+                    st.markdown(f"_{ref.get('caracteristicas','')[:280]}_")
                     if ref.get("url_amazon"):
                         st.markdown(f"[🔗 Ver en Amazon]({ref['url_amazon']})")
                 with mid:
                     st.markdown("<div style='font-size:2rem;text-align:center;margin-top:50px'>→</div>", unsafe_allow_html=True)
                 with c2:
-                    st.markdown("##### 🟦 Alternativa Cecotec")
-                    st.markdown(f"**{alt.get('cecotec_nombre','')}**")
-                    p_orig = alt.get("cecotec_precio_original")
-                    if p_orig:
-                        st.markdown(f"~~{p_orig}€~~ → 💶 **{alt.get('cecotec_precio','')} €**")
-                    else:
-                        st.markdown(f"💶 **{alt.get('cecotec_precio','')} €**")
-                    st.markdown(f'<span class="{tag_css}">{tag_label}</span>', unsafe_allow_html=True)
-                    if ahorro > 0:
-                        st.markdown(f"💰 **Ahorro: {ahorro:.2f} €**")
-                    st.markdown(f"_{alt.get('cecotec_caracteristicas','')}_")
-                    st.caption(f"📂 {alt.get('cecotec_categoria','')}  ·  🏷️ Ref: {alt.get('cecotec_referencia','')}")
-                    if alt.get("cecotec_url"):
-                        st.markdown(f"[🔗 Ver en Cecotec.es]({alt['cecotec_url']})")
+                    st.markdown("##### 🟦 Alternativas Cecotec")
+                    # Tab per alternative
+                    tab_labels = [a.get("label","Opción") for a in alternatives]
+                    alt_tabs = st.tabs(tab_labels)
+                    for tab, a in zip(alt_tabs, alternatives):
+                        with tab:
+                            prest = a.get("prestaciones","")
+                            tag_css   = {"mejor":"tag-mejor","igual":"tag-igual","peor":"tag-peor"}.get(prest,"tag-skip")
+                            tag_label = {"mejor":"✅ Mejor valor","igual":"🟡 Equivalente","peor":"🔴 Inferior"}.get(prest,prest)
+                            st.markdown(f"**{a.get('cecotec_nombre','')}**")
+                            p_orig = a.get("cecotec_precio_original")
+                            if p_orig:
+                                st.markdown(f"~~{p_orig}€~~ → 💶 **{a.get('cecotec_precio','')} €**")
+                            else:
+                                st.markdown(f"💶 **{a.get('cecotec_precio','')} €**")
+                            st.markdown(f'<span class="{tag_css}">{tag_label}</span>', unsafe_allow_html=True)
+                            ah = float(a.get("ahorro_eur") or 0)
+                            if ah > 0:
+                                st.markdown(f"💰 **Ahorro: {ah:.2f} €**")
+                            # Conclusion
+                            if a.get("justificacion"):
+                                st.markdown(a["justificacion"])
+                            st.markdown(f"_{a.get('cecotec_caracteristicas','')}_")
+                            st.caption(f"📂 {a.get('cecotec_categoria','')}  ·  🏷️ Ref: {a.get('cecotec_referencia','')}")
+                            if a.get("cecotec_url"):
+                                st.markdown(f"[🔗 Ver en Cecotec.es]({a['cecotec_url']})")
 
 def run_search_local(df_proc: pd.DataFrame, df_cec: pd.DataFrame) -> list:
     """Instant local matching — no API calls, no waiting."""
@@ -676,6 +933,11 @@ if not feed_ok:
         st.stop()
 
 # ── TABS ──────────────────────────────────────────────────────────────────────
+# Auto-navigate to results tab if search just completed
+_default_tab = 3 if st.session_state.pop("active_tab", None) == "resultados" else 0
+if _default_tab == 3:
+    st.toast("✅ Comparación completada — mostrando resultados", icon="🎯")
+
 tab_keepa, tab_manual, tab_fichero, tab_resultados, tab_feed = st.tabs([
     "📦 Keepa Bestsellers","✏️ Producto manual",
     "📂 Subir fichero","📊 Resultados","🗄️ Feed Cecotec",
@@ -718,7 +980,7 @@ with tab_keepa:
         if st.button("🚀 Comparar todos con Cecotec", type="primary", use_container_width=True, key="btn_k"):
             with st.spinner("Calculando…"):
                 st.session_state["results"] = run_search_local(df_proc, df_cecotec)
-            st.success(f"✅ {len(df_proc)} productos comparados. Ve a **📊 Resultados**.")
+            st.session_state["active_tab"] = "resultados"
             st.rerun()
 
 # ═══ TAB 2 · MANUAL ═══════════════════════════════════════════════════════════
@@ -809,7 +1071,7 @@ with tab_fichero:
             if st.button("🚀 Buscar alternativas", type="primary", use_container_width=True, key="btn_c"):
                 with st.spinner("Calculando…"):
                     st.session_state["results_custom"] = run_search_local(df_p, df_cecotec)
-                st.success("✅ Completado. Ve a **📊 Resultados**.")
+                st.session_state["active_tab"] = "resultados"
                 st.rerun()
         except Exception as e:
             st.error(f"Error: {e}")
