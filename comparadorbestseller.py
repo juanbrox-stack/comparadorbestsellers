@@ -54,8 +54,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ── Constantes ────────────────────────────────────────────────────────────────
-KEEPA_HOGAR   = "KeepaExport-2026-05-19-BestSellersList-9-599391031.xlsx"
-KEEPA_BELLEZA = "BellezaKeepaExport-2026-05-19-BestSellersList-9-4347698031-9000.xlsx"
+# Keepa files are auto-discovered — no hardcoding needed
 FEED_FILE     = "feed_Espan_a.xlsx"
 STOCK_FILE    = "stock_cecotec.csv"
 
@@ -183,17 +182,54 @@ def load_stock(path_str: str) -> pd.DataFrame:
     df["Referencia"] = df["Referencia"].astype(str).str.strip()
     return df[["Referencia", "Stock Operativo", "Mar", "Puerto"]].drop_duplicates("Referencia")
 
-# ── Carga Keepa (sin límite de 100) ──────────────────────────────────────────
+# ── Carga Keepa — autodescubrimiento de ficheros ─────────────────────────────
+# Patrón de exclusión: ficheros que NO son exports Keepa de competidores
+_EXCLUDE_PATTERNS = ["feed_espan", "stock_cecotec"]
+
+def _is_keepa_file(path: Path) -> bool:
+    """Devuelve True si el xlsx parece un export Keepa de productos (tiene columna ASIN)."""
+    name = path.name.lower()
+    # Excluir feed y stock
+    if any(ex in name for ex in _EXCLUDE_PATTERNS):
+        return False
+    return True
+
+def _guess_source(path: Path) -> str:
+    """Infiere la categoría/fuente del nombre del fichero."""
+    name = path.stem.lower()
+    if "belleza" in name or "beauty" in name:
+        return "Belleza"
+    if "gae" in name or "gran" in name or "electrodom" in name:
+        return "Gran Electrodoméstico"
+    if "hogar" in name or "home" in name or "kitchen" in name:
+        return "Hogar"
+    # Fallback: usar el nombre del fichero sin extensión, limpio
+    clean = re.sub(r"keepaexport.*?bestsellerslist.*?\d+", "", name, flags=re.IGNORECASE).strip("-_ ")
+    return clean.title() if clean else path.stem
+
 @st.cache_data
 def load_keepa_files(upload_dir: str) -> pd.DataFrame:
+    """Carga automáticamente todos los xlsx Keepa que encuentre en el directorio."""
+    import glob
     dfs = []
-    for fname, source in [(KEEPA_HOGAR,"Hogar"),(KEEPA_BELLEZA,"Belleza")]:
-        p = Path(upload_dir) / fname
-        if not p.exists(): continue
-        df = pd.read_excel(p)
-        df["_source"] = source
-        dfs.append(df)
-    if not dfs: return pd.DataFrame()
+    files = sorted(glob.glob(str(Path(upload_dir) / "*.xlsx")) +
+                   glob.glob(str(Path(upload_dir) / "*.xls")))
+    for fpath in files:
+        p = Path(fpath)
+        if not _is_keepa_file(p):
+            continue
+        try:
+            df = pd.read_excel(p)
+            # Verify it looks like a Keepa export (has ASIN column)
+            if "ASIN" not in df.columns and "Título" not in df.columns:
+                continue
+            df["_source"] = _guess_source(p)
+            df["_filename"] = p.name
+            dfs.append(df)
+        except Exception:
+            continue
+    if not dfs:
+        return pd.DataFrame()
     return _process_keepa(pd.concat(dfs, ignore_index=True))
 
 def load_custom_file(file) -> pd.DataFrame:
@@ -888,9 +924,10 @@ with c1:
 with c2:
     if keepa_ok:
         df_rel = df_keepa[df_keepa["_cecotec_relevant"]]
-        st.success(f"✅ Keepa: **{len(df_rel)}** relevantes de **{len(df_keepa)}** totales")
+        n_files = df_keepa["_filename"].nunique() if "_filename" in df_keepa.columns else "?"
+        st.success(f"✅ Keepa: **{n_files} ficheros** · **{len(df_rel)}** relevantes de {len(df_keepa)} totales")
     else:
-        st.warning("⚠️ Archivos Keepa no encontrados")
+        st.warning("⚠️ Sin ficheros Keepa detectados en la carpeta del proyecto")
 with c3:
     stock_ok = not df_stock_data.empty
     if stock_ok:
@@ -951,16 +988,20 @@ with tab_keepa:
         df_relevant = df_keepa[df_keepa["_cecotec_relevant"]].copy()
         df_skipped  = df_keepa[~df_keepa["_cecotec_relevant"]].copy()
         st.markdown('<div class="cec-section-title">📊 Bestsellers Amazon · Análisis de competencia</div>', unsafe_allow_html=True)
-        st.markdown(f"""<div class="kpi-row">
-          <div class="kpi"><div class="val">{len(df_keepa[df_keepa['_source']=='Hogar']):,}</div><div class="lbl">Productos Hogar</div></div>
-          <div class="kpi"><div class="val">{len(df_keepa[df_keepa['_source']=='Belleza']):,}</div><div class="lbl">Productos Belleza</div></div>
-          <div class="kpi"><div class="val">{len(df_relevant)}</div><div class="lbl">Con equiv. Cecotec</div></div>
-          <div class="kpi"><div class="val">{len(df_skipped)}</div><div class="lbl">Sin cobertura</div></div>
-        </div>""", unsafe_allow_html=True)
+        # KPIs dinámicos por fuente detectada
+        source_counts = df_keepa["_source"].value_counts()
+        kpi_html = "".join(
+            f'<div class="kpi"><div class="val">{cnt:,}</div><div class="lbl">{src}</div></div>'
+            for src, cnt in source_counts.items()
+        )
+        kpi_html += f'<div class="kpi"><div class="val">{len(df_relevant)}</div><div class="lbl">Con equiv. Cecotec</div></div>'
+        kpi_html += f'<div class="kpi"><div class="val">{len(df_skipped)}</div><div class="lbl">Sin cobertura</div></div>'
+        st.markdown(f'<div class="kpi-row">{kpi_html}</div>', unsafe_allow_html=True)
 
         c1, c2, c3 = st.columns(3)
         with c1:
-            src = st.multiselect("Origen", ["Hogar","Belleza"], default=["Hogar","Belleza"], key="k_src")
+            _sources = sorted(df_keepa["_source"].unique().tolist())
+            src = st.multiselect("Origen", _sources, default=_sources, key="k_src")
         with c2:
             pmax = float(df_relevant["precio"].max() or 500)
             pmin_v, pmax_v = st.slider("Precio competidor (€)", 0.0, pmax, (0.0, pmax), step=5.0, key="k_p")
@@ -1093,6 +1134,27 @@ with tab_resultados:
 
 # ═══ TAB 5 · FEED ═════════════════════════════════════════════════════════════
 with tab_feed:
+    # ── Ficheros Keepa detectados ─────────────────────────────────────────────
+    st.markdown('<div class="cec-section-title">📂 Ficheros Keepa detectados automáticamente</div>', unsafe_allow_html=True)
+    if keepa_ok and "_filename" in df_keepa.columns:
+        file_summary = df_keepa.groupby(["_filename","_source"]).agg(
+            Total=("asin","count"),
+            Relevantes=("_cecotec_relevant","sum"),
+            Precio_min=("precio","min"),
+            Precio_max=("precio","max"),
+        ).reset_index().rename(columns={"_filename":"Fichero","_source":"Categoría detectada"})
+        st.dataframe(file_summary, use_container_width=True, hide_index=True,
+                     column_config={
+                         "Precio_min": st.column_config.NumberColumn("Precio mín (€)", format="%.2f €"),
+                         "Precio_max": st.column_config.NumberColumn("Precio máx (€)", format="%.2f €"),
+                     })
+        st.caption("💡 Para añadir un nuevo fichero Keepa basta con copiarlo en la carpeta del proyecto y pulsar 🗑️ para limpiar caché.")
+    else:
+        st.warning("No se han detectado ficheros Keepa.")
+
+    st.divider()
+
+    # ── Catálogo Cecotec ──────────────────────────────────────────────────────
     st.markdown('<div class="cec-section-title">🗄️ Catálogo Cecotec cargado</div>', unsafe_allow_html=True)
     st.markdown(f"""<div class="kpi-row">
       <div class="kpi"><div class="val">{len(df_cecotec):,}</div><div class="lbl">Productos en stock</div></div>
