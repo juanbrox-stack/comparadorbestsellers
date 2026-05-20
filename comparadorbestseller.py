@@ -217,6 +217,9 @@ def _process_keepa(df: pd.DataFrame) -> pd.DataFrame:
     for col in ["asin","titulo","precio","subcategoria","ranking","fabricante",
                 "url_amazon","feat1","feat2","feat3","feat4","descripcion_breve"]:
         if col not in df.columns: df[col] = ""
+    # Excluir productos propios Cecotec (solo interesan competidores)
+    if "fabricante" in df.columns:
+        df = df[~df["fabricante"].str.lower().str.contains("cecotec", na=False)].copy()
     if "ranking" in df.columns:
         df = df.sort_values("ranking")
     # No limit — process ALL products
@@ -231,7 +234,169 @@ def _process_keepa(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 # ── Matching local 100% pandas ────────────────────────────────────────────────
-def _make_alt(row, precio_ref):
+def _extract_specs(text: str) -> dict:
+    """Extract numeric specs from a description string."""
+    text = text.lower()
+    specs = {}
+    # Watts
+    m = re.search(r'(\d[\d.,]+)\s*w\b', text)
+    if m: specs["w"] = float(m.group(1).replace(",","."))
+    # Pressure Pa/kPa
+    m = re.search(r'(\d[\d.,]+)\s*kpa', text)
+    if m: specs["kpa"] = float(m.group(1).replace(",","."))
+    m = re.search(r'(\d[\d.,]+)\s*pa\b', text)
+    if m: specs["pa"] = float(m.group(1).replace(",","."))
+    # Steam g/min
+    m = re.search(r'(\d[\d.,]+)\s*g/min', text)
+    if m: specs["g_min"] = float(m.group(1).replace(",","."))
+    # Capacity L
+    m = re.search(r'(\d[\d.,]+)\s*l\b', text)
+    if m: specs["litros"] = float(m.group(1).replace(",","."))
+    # Autonomy min
+    m = re.search(r'(\d+)\s*min', text)
+    if m: specs["minutos"] = int(m.group(1))
+    # Temperature
+    m = re.search(r'(\d+)\s*º|(\d+)\s*grados', text)
+    if m: specs["temp"] = int((m.group(1) or m.group(2)))
+    return specs
+
+def _build_conclusion(ref: dict, row, precio_ref: float, precio_cec: float, prestaciones: str) -> str:
+    """Generate a human-readable conclusion explaining the verdict."""
+    ahorro = precio_ref - precio_cec
+    pct    = (ahorro / precio_ref * 100) if precio_ref > 0 else 0
+
+    ref_text = (str(ref.get("titulo","")) + " " + str(ref.get("caracteristicas",""))).lower()
+    cec_text = (str(row["title"]) + " " + str(row["desc_clean"])).lower()
+
+    ref_specs = _extract_specs(ref_text)
+    cec_specs = _extract_specs(cec_text)
+
+    puntos_favor    = []
+    puntos_contra   = []
+    puntos_neutros  = []
+
+    # ── Precio ────────────────────────────────────────────────────────────────
+    if ahorro > 0:
+        puntos_favor.append(f"precio {ahorro:.2f}€ más barato ({pct:.0f}% de ahorro)")
+    elif ahorro < 0:
+        puntos_contra.append(f"precio {abs(ahorro):.2f}€ más caro que el competidor")
+
+    # ── Potencia W ────────────────────────────────────────────────────────────
+    if "w" in ref_specs and "w" in cec_specs:
+        diff_w = cec_specs["w"] - ref_specs["w"]
+        if diff_w >= 200:
+            puntos_favor.append(f"mayor potencia ({int(cec_specs['w'])}W vs {int(ref_specs['w'])}W)")
+        elif diff_w <= -200:
+            puntos_contra.append(f"menor potencia ({int(cec_specs['w'])}W vs {int(ref_specs['w'])}W)")
+        else:
+            puntos_neutros.append(f"potencia similar ({int(cec_specs['w'])}W)")
+
+    # ── Presión kPa/Pa ─────────────────────────────────────────────────────
+    for key, label in [("kpa","kPa"), ("pa","Pa")]:
+        if key in ref_specs and key in cec_specs:
+            diff = cec_specs[key] - ref_specs[key]
+            if diff >= ref_specs[key] * 0.1:
+                puntos_favor.append(f"mayor succión ({cec_specs[key]:.0f} {label} vs {ref_specs[key]:.0f})")
+            elif diff <= -ref_specs[key] * 0.1:
+                puntos_contra.append(f"menor succión ({cec_specs[key]:.0f} {label} vs {ref_specs[key]:.0f})")
+
+    # ── Vapor g/min ────────────────────────────────────────────────────────
+    if "g_min" in ref_specs and "g_min" in cec_specs:
+        diff = cec_specs["g_min"] - ref_specs["g_min"]
+        if diff >= 5:
+            puntos_favor.append(f"más vapor ({cec_specs['g_min']:.0f} g/min vs {ref_specs['g_min']:.0f})")
+        elif diff <= -5:
+            puntos_contra.append(f"menos vapor ({cec_specs['g_min']:.0f} g/min vs {ref_specs['g_min']:.0f})")
+        else:
+            puntos_neutros.append(f"vapor similar ({cec_specs['g_min']:.0f} g/min)")
+
+    # ── Capacidad ─────────────────────────────────────────────────────────
+    if "litros" in ref_specs and "litros" in cec_specs:
+        diff = cec_specs["litros"] - ref_specs["litros"]
+        if diff >= 0.3:
+            puntos_favor.append(f"mayor capacidad ({cec_specs['litros']:.1f}L vs {ref_specs['litros']:.1f}L)")
+        elif diff <= -0.3:
+            puntos_contra.append(f"menor capacidad ({cec_specs['litros']:.1f}L vs {ref_specs['litros']:.1f}L)")
+
+    # ── Autonomía ──────────────────────────────────────────────────────────
+    if "minutos" in ref_specs and "minutos" in cec_specs:
+        diff = cec_specs["minutos"] - ref_specs["minutos"]
+        if diff >= 10:
+            puntos_favor.append(f"más autonomía ({cec_specs['minutos']} min vs {ref_specs['minutos']} min)")
+        elif diff <= -10:
+            puntos_contra.append(f"menos autonomía ({cec_specs['minutos']} min vs {ref_specs['minutos']} min)")
+
+    # ── Funcionalidades clave ──────────────────────────────────────────────
+    features_check = [
+        (["wifi","connected","app","smart"], "conectividad WiFi/App"),
+        (["hepa","h13","h14"], "filtro HEPA"),
+        (["autovacío","auto-vaciado","vaciado automático"], "vaciado automático"),
+        (["display","pantalla","lcd"], "pantalla/display"),
+        (["inox","acero inoxidable"], "acabado inox"),
+        (["sin bolsa","sin cable","inalámbric"], "sin cable/bolsa"),
+        (["golpe vapor","boost","turbo"], "función turbo/golpe vapor"),
+        (["doble voltaje","voltaje universal"], "doble voltaje"),
+    ]
+    for kws, label in features_check:
+        ref_has = any(k in ref_text for k in kws)
+        cec_has = any(k in cec_text for k in kws)
+        if ref_has and cec_has:
+            puntos_neutros.append(f"ambos con {label}")
+        elif not ref_has and cec_has:
+            puntos_favor.append(f"incorpora {label} (el competidor no)")
+        elif ref_has and not cec_has:
+            puntos_contra.append(f"sin {label} (el competidor sí lo tiene)")
+
+    # ── Categoría diferente ────────────────────────────────────────────────
+    ref_subcat = str(ref.get("subcategoria","")).lower()
+    cec_cat    = str(row["categories"]).lower()
+    CAT_DIFF_NOTES = {
+        ("cepillos de vapor", "vaporeta"): "es una vaporeta de mano, no un cepillo de vapor específico",
+        ("planchas de vapor verticales para viaje", "planchas verticales"): "plancha vertical, función similar para viaje",
+        ("procesadores de alimentos", "batidoras"): "batidora/picadora, funciones similares aunque sin todos los accesorios",
+    }
+    for (ref_k, cec_k), nota in CAT_DIFF_NOTES.items():
+        if ref_k in ref_subcat and cec_k in cec_cat:
+            puntos_neutros.append(nota)
+
+    # ── Construir texto final ──────────────────────────────────────────────
+    partes = []
+    if prestaciones == "mejor":
+        partes.append("**✅ Cecotec es mejor opción** porque")
+        items = puntos_favor[:3]
+        if puntos_contra:
+            items_contra = puntos_contra[:1]
+        else:
+            items_contra = []
+    elif prestaciones == "peor":
+        partes.append("**🔴 Cecotec es inferior** ya que")
+        items = puntos_contra[:3]
+        items_contra = []
+    else:
+        partes.append("**🟡 Prestaciones equivalentes**:")
+        items = puntos_favor[:2] + puntos_neutros[:2]
+        items_contra = puntos_contra[:1]
+
+    if items:
+        partes.append(", ".join(items))
+    if items_contra:
+        partes.append(f"aunque {', '.join(items_contra)}")
+    if puntos_neutros and prestaciones == "igual" and not items:
+        partes.append(", ".join(puntos_neutros[:2]))
+
+    conclusion = " ".join(partes)
+    if not conclusion.strip() or conclusion.strip() in ("**✅ Cecotec es mejor opción** porque", "**🟡 Prestaciones equivalentes**:", "**🔴 Cecotec es inferior** ya que"):
+        # Fallback genérico
+        if prestaciones == "mejor":
+            conclusion = f"**✅ Mejor opción:** precio {ahorro:.2f}€ más barato ({pct:.0f}% ahorro) en la misma categoría"
+        elif prestaciones == "peor":
+            conclusion = f"**🔴 Precio mayor** que el competidor en {abs(ahorro):.2f}€, pero Cecotec con garantía y servicio directo"
+        else:
+            conclusion = f"**🟡 Alternativa equivalente** a menor precio ({ahorro:.2f}€ de ahorro)"
+
+    return conclusion
+
+def _make_alt(row, precio_ref, ref=None):
     precio_cec = float(row["precio_final"])
     ahorro = round(precio_ref - precio_cec, 2) if precio_ref > 0 else 0.0
     prestaciones = "igual"
@@ -239,6 +404,7 @@ def _make_alt(row, precio_ref):
         prestaciones = "mejor"
     elif precio_cec > precio_ref:
         prestaciones = "peor"
+    conclusion = _build_conclusion(ref or {}, row, precio_ref, precio_cec, prestaciones)
     return {
         "cecotec_nombre":         row["title"],
         "cecotec_precio":         precio_cec,
@@ -251,7 +417,7 @@ def _make_alt(row, precio_ref):
         "cecotec_imagen":         row.get("image_link",""),
         "ahorro_eur":             ahorro,
         "prestaciones":           prestaciones,
-        "justificacion":          f"'{row['categories']}' · {precio_cec}€",
+        "justificacion":          conclusion,
     }
 
 def find_best_match_local(ref: dict, df_cec: pd.DataFrame) -> dict:
@@ -358,7 +524,7 @@ def find_best_match_local(ref: dict, df_cec: pd.DataFrame) -> dict:
         ref_id = str(row.get("mpn","") or row["title"])
         if ref_id not in seen_refs:
             seen_refs.add(ref_id)
-            alt = _make_alt(row, precio_ref)
+            alt = _make_alt(row, precio_ref, ref=ref)
             alt["label"] = label
             alternatives.append(alt)
         if len(alternatives) == 3:
@@ -395,6 +561,7 @@ def render_results(results, df_stk=None):
                 "Alternativa Cecotec": "❌ " + alt.get("motivo","")[:70],
                 "Precio Cecotec (€)": None, "Ahorro (€)": None,
                 "Prestaciones":"—","Ref. Cecotec":"—","URL Cecotec":"",
+                "Conclusión": "—",
                 "Stock Operativo": None, "Stock Mar": None, "Stock Puerto": None,
             })
         else:
@@ -414,6 +581,7 @@ def render_results(results, df_stk=None):
                 "Prestaciones": pmap.get(alt.get("prestaciones",""), alt.get("prestaciones","")),
                 "Ref. Cecotec": alt.get("cecotec_referencia",""),
                 "URL Cecotec": alt.get("cecotec_url",""),
+                "Conclusión": alt.get("justificacion",""),
                 "Stock Operativo": st_op,
                 "Stock Mar": st_mar,
                 "Stock Puerto": st_pto,
@@ -432,6 +600,7 @@ def render_results(results, df_stk=None):
         "Precio Cecotec (€)": st.column_config.NumberColumn(format="%.2f €"),
         "Ahorro (€)":         st.column_config.NumberColumn(format="%.2f €"),
         "URL Cecotec":        st.column_config.LinkColumn("URL Cecotec"),
+        "Conclusión":         st.column_config.TextColumn("Conclusión", width="large"),
         "Stock Operativo":    st.column_config.NumberColumn("Stock Disponible", format="%d uds"),
         "Stock Mar":          st.column_config.NumberColumn("Stock Mar", format="%d uds"),
         "Stock Puerto":       st.column_config.NumberColumn("Stock Puerto", format="%d uds"),
@@ -665,6 +834,9 @@ def render_results(results, df_stk=None):
                             ah = float(a.get("ahorro_eur") or 0)
                             if ah > 0:
                                 st.markdown(f"💰 **Ahorro: {ah:.2f} €**")
+                            # Conclusion
+                            if a.get("justificacion"):
+                                st.markdown(a["justificacion"])
                             st.markdown(f"_{a.get('cecotec_caracteristicas','')}_")
                             st.caption(f"📂 {a.get('cecotec_categoria','')}  ·  🏷️ Ref: {a.get('cecotec_referencia','')}")
                             if a.get("cecotec_url"):
