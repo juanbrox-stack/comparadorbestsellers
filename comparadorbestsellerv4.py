@@ -629,7 +629,6 @@ def render_results(results, df_stk=None):
         st_pto = int(stk["Puerto"])          if stk is not None else None
         if alt.get("no_encontrado"):
             rows.append({
-                "País": COUNTRY_FLAGS.get(ref.get("_country","ES"),"🌍") + " " + ref.get("_country","ES"),
                 "ASIN": ref.get("asin",""),
                 "Producto competidor": titulo[:80],
                 "Marca": ref.get("fabricante",""),
@@ -639,7 +638,6 @@ def render_results(results, df_stk=None):
                 "Precio Cecotec (€)": None, "Ahorro (€)": None,
                 "Prestaciones":"—","Ref. Cecotec":"—","URL Cecotec":"",
                 "Conclusión": "—",
-                "URL Amazon": ref.get("url_amazon",""),
                 "Stock Operativo": None, "Stock Mar": None, "Stock Puerto": None,
             })
         else:
@@ -648,7 +646,6 @@ def render_results(results, df_stk=None):
             ahorro_total += ahorro
             pmap = {"mejor":"✅ Mejor","igual":"🟡 Igual","peor":"🔴 Peor"}
             rows.append({
-                "País": COUNTRY_FLAGS.get(ref.get("_country","ES"),"🌍") + " " + ref.get("_country","ES"),
                 "ASIN": ref.get("asin",""),
                 "Producto competidor": titulo[:80],
                 "Marca": ref.get("fabricante",""),
@@ -661,47 +658,24 @@ def render_results(results, df_stk=None):
                 "Ref. Cecotec": alt.get("cecotec_referencia",""),
                 "URL Cecotec": alt.get("cecotec_url",""),
                 "Conclusión": alt.get("justificacion",""),
-                "URL Amazon": ref.get("url_amazon",""),
                 "Stock Operativo": st_op,
                 "Stock Mar": st_mar,
                 "Stock Puerto": st_pto,
             })
 
     df_res = pd.DataFrame(rows)
-
-    # ── KPIs ─────────────────────────────────────────────────────────────────
     st.markdown(f"""<div class="kpi-row">
       <div class="kpi"><div class="val">{encontrados}</div><div class="lbl">Alternativas encontradas</div></div>
       <div class="kpi"><div class="val">{len(results)-encontrados}</div><div class="lbl">Sin alternativa</div></div>
-      <div class="kpi"><div class="val">{ahorro_total:.0f} €</div><div class="lbl">Ahorro acumulado</div></div>
+      <div class="kpi"><div class="val">{ahorro_total:.0f} €</div><div class="lbl">Ahorro total acumulado</div></div>
       <div class="kpi"><div class="val">{encontrados*100//len(results) if results else 0}%</div><div class="lbl">Tasa de cobertura</div></div>
     </div>""", unsafe_allow_html=True)
-
-    # ── Country breakdown (if multi-country) ─────────────────────────────────
-    if "País" in df_res.columns and df_res["País"].nunique() > 1:
-        st.markdown('<div class="cec-section-title">🌍 Desglose por país</div>', unsafe_allow_html=True)
-        country_stats = df_res.groupby("País").agg(
-            Total=("ASIN","count"),
-            Encontrados=("Alternativa Cecotec", lambda x: (x.str.startswith("❌") == False).sum()),
-            Ahorro=("Ahorro (€)", lambda x: pd.to_numeric(x, errors="coerce").sum()),
-        ).reset_index()
-        country_stats["Cobertura"] = (country_stats["Encontrados"] / country_stats["Total"] * 100).round(0).astype(int).astype(str) + "%"
-        country_stats["Ahorro"] = country_stats["Ahorro"].round(2)
-        st.dataframe(country_stats, use_container_width=True, hide_index=True,
-                     column_config={"Ahorro": st.column_config.NumberColumn("Ahorro total (€)", format="%.2f €")})
-
-        # Country filter for the main table
-        _all_countries = sorted(df_res["País"].unique().tolist())
-        _sel_countries = st.multiselect("Filtrar por país", _all_countries, default=_all_countries, key="res_country")
-        if _sel_countries:
-            df_res = df_res[df_res["País"].isin(_sel_countries)]
 
     st.dataframe(df_res, use_container_width=True, hide_index=True, column_config={
         "Precio comp. (€)":   st.column_config.NumberColumn(format="%.2f €"),
         "Precio Cecotec (€)": st.column_config.NumberColumn(format="%.2f €"),
         "Ahorro (€)":         st.column_config.NumberColumn(format="%.2f €"),
         "URL Cecotec":        st.column_config.LinkColumn("URL Cecotec"),
-        "URL Amazon":         st.column_config.LinkColumn("URL Amazon"),
         "Conclusión":         st.column_config.TextColumn("Conclusión", width="large"),
         "Stock Operativo":    st.column_config.NumberColumn("Stock Disponible", format="%d uds"),
         "Stock Mar":          st.column_config.NumberColumn("Stock Mar", format="%d uds"),
@@ -755,9 +729,9 @@ def render_results(results, df_stk=None):
                         cell.fill = PatternFill("solid", start_color="FFFCE4EC")
                         cell.font = Font(name="Arial", size=9, color="FFB71C1C")
                 # URL as hyperlink
-                if col_name in ("URL Cecotec","URL Amazon") and val and str(val).startswith("http"):
+                if col_name == "URL Cecotec" and val and str(val).startswith("http"):
                     cell.hyperlink = str(val)
-                    cell.value = "🔗 Ver" if col_name == "URL Cecotec" else "🛒 Amazon"
+                    cell.value = "🔗 Ver"
                     cell.font = Font(name="Arial", size=9, color="FF3EB1C8", underline="single")
 
         # Column widths
@@ -766,7 +740,7 @@ def render_results(results, df_stk=None):
             "Precio comp. (€)": 13, "Subcategoría": 22,
             "Alternativa Cecotec": 38, "Precio Cecotec (€)": 13,
             "Ahorro (€)": 10, "Prestaciones": 12, "Ref. Cecotec": 14,
-            "URL Cecotec": 10, "URL Amazon": 10, "Stock Operativo": 13, "Stock Mar": 11, "Stock Puerto": 12,
+            "URL Cecotec": 10, "Stock Operativo": 13, "Stock Mar": 11, "Stock Puerto": 12,
         }
         for ci, h in enumerate(headers, 1):
             ws.column_dimensions[get_column_letter(ci)].width = col_widths.get(h, 15)
@@ -815,9 +789,9 @@ def render_results(results, df_stk=None):
         ]
 
         # Select key columns for PDF (avoid too wide)
-        pdf_cols = ["País","Producto competidor","Marca","Precio comp. (€)",
+        pdf_cols = ["Producto competidor","Marca","Precio comp. (€)",
                     "Alternativa Cecotec","Precio Cecotec (€)","Ahorro (€)",
-                    "Prestaciones","Stock Operativo","Stock Mar","Stock Puerto","URL Cecotec","URL Amazon"]
+                    "Prestaciones","Stock Operativo","Stock Mar","Stock Puerto","URL Cecotec"]
         pdf_cols = [c for c in pdf_cols if c in df.columns]
         df_pdf = df[pdf_cols].copy()
         df_pdf["URL Cecotec"] = df_pdf["URL Cecotec"].apply(
@@ -828,7 +802,7 @@ def render_results(results, df_stk=None):
             "Precio comp. (€)": 18*mm, "Alternativa Cecotec": 55*mm,
             "Precio Cecotec (€)": 18*mm, "Ahorro (€)": 16*mm,
             "Prestaciones": 18*mm, "Stock Operativo": 18*mm,
-            "Stock Mar": 16*mm, "Stock Puerto": 18*mm, "URL Cecotec": 12*mm, "URL Amazon": 12*mm, "País": 10*mm,
+            "Stock Mar": 16*mm, "Stock Puerto": 18*mm, "URL Cecotec": 14*mm,
         }
         widths = [col_widths_pdf.get(c, 20*mm) for c in pdf_cols]
 
@@ -899,10 +873,8 @@ def render_results(results, df_stk=None):
             alternatives = alt.get("alternativas", [alt])
             main_alt = alternatives[0]
             ahorro = float(main_alt.get("ahorro_eur") or 0)
-            country = ref.get("_country","ES")
-            flag = COUNTRY_FLAGS.get(country,"🌍")
             with st.expander(
-                f"{flag} **{ref.get('titulo','')[:50]}** · {ref.get('precio','')}€  →  "
+                f"**{ref.get('titulo','')[:55]}** · {ref.get('precio','')}€  →  "
                 f"**{main_alt.get('cecotec_nombre','')[:45]}** · {main_alt.get('cecotec_precio','')}€"
                 + (f"  💰 -{ahorro:.2f}€" if ahorro > 0 else "")
             ):
@@ -1038,36 +1010,15 @@ if not feed_ok:
         st.stop()
 
 # ── TABS ──────────────────────────────────────────────────────────────────────
-_just_finished = st.session_state.pop("active_tab", None) == "resultados"
+# Auto-navigate to results tab if search just completed
+_default_tab = 3 if st.session_state.pop("active_tab", None) == "resultados" else 0
+if _default_tab == 3:
+    st.toast("✅ Comparación completada — mostrando resultados", icon="🎯")
 
 tab_keepa, tab_manual, tab_fichero, tab_resultados, tab_feed = st.tabs([
     "📦 Keepa Bestsellers","✏️ Producto manual",
     "📂 Subir fichero","📊 Resultados","🗄️ Feed Cecotec",
 ])
-
-# Auto-click the Resultados tab via JS when search just completed
-if _just_finished:
-    st.toast("✅ Comparación completada", icon="🎯")
-    st.components.v1.html("""
-    <script>
-    // Wait for Streamlit to render tabs, then click "Resultados"
-    function clickResultsTab() {
-        const tabs = window.parent.document.querySelectorAll('[data-baseweb="tab"]');
-        for (const tab of tabs) {
-            if (tab.textContent.includes('Resultados')) {
-                tab.click();
-                return true;
-            }
-        }
-        return false;
-    }
-    // Try immediately and retry a few times
-    let attempts = 0;
-    const interval = setInterval(() => {
-        if (clickResultsTab() || ++attempts > 20) clearInterval(interval);
-    }, 150);
-    </script>
-    """, height=0)
 
 # ═══ TAB 1 · KEEPA ════════════════════════════════════════════════════════════
 with tab_keepa:
