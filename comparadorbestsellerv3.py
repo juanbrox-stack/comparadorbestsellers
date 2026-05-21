@@ -194,79 +194,40 @@ def _is_keepa_file(path: Path) -> bool:
         return False
     return True
 
-COUNTRY_CODES = {
-    "fr": "FR", "france": "FR",
-    "it": "IT", "italy": "IT", "italia": "IT",
-    "de": "DE", "germany": "DE", "alemania": "DE",
-    "uk": "UK", "gb": "UK",
-    "pt": "PT", "portugal": "PT",
-    "pl": "PL", "poland": "PL",
-    "es": "ES", "spain": "ES", "espana": "ES",
-}
-COUNTRY_FLAGS = {"ES":"🇪🇸","FR":"🇫🇷","IT":"🇮🇹","DE":"🇩🇪","UK":"🇬🇧","PT":"🇵🇹","PL":"🇵🇱"}
-
-def _guess_source(path: Path) -> tuple:
-    """Devuelve (categoría, país) inferidos del nombre del fichero.
-    Convención: [Categoría_][País_]KeepaExport...
-    Ejemplos:
-      Hogar_FR_KeepaExport...  → ("Hogar", "FR")
-      BellezaKeepaExport...    → ("Belleza", "ES")
-      GAE_KeepaExport...       → ("Gran Electrodoméstico", "ES")
-    """
-    name = path.stem
-    parts = re.split(r"[_\-\s]", name)
-
-    # Detect country from any part of the filename
-    country = "ES"
-    for part in parts:
-        if part.lower() in COUNTRY_CODES:
-            country = COUNTRY_CODES[part.lower()]
-            break
-
-    # Detect category
-    name_lower = name.lower()
-    if "belleza" in name_lower or "beauty" in name_lower:
-        cat = "Belleza"
-    elif "gae" in name_lower or "gran" in name_lower or "electrodom" in name_lower:
-        cat = "Gran Electrodoméstico"
-    elif "hogar" in name_lower or "home" in name_lower or "kitchen" in name_lower:
-        cat = "Hogar"
-    else:
-        # Fallback: strip keepa boilerplate and country codes
-        clean = re.sub(r"keepaexport.*", "", name_lower, flags=re.IGNORECASE)
-        for code in COUNTRY_CODES:
-            clean = re.sub(rf"\b{code}\b", "", clean, flags=re.IGNORECASE)
-        clean = re.sub(r"[_\-\s]+", " ", clean).strip()
-        cat = clean.title() if clean else "Otros"
-
-    return cat, country
+def _guess_source(path: Path) -> str:
+    """Infiere la categoría/fuente del nombre del fichero."""
+    name = path.stem.lower()
+    if "belleza" in name or "beauty" in name:
+        return "Belleza"
+    if "gae" in name or "gran" in name or "electrodom" in name:
+        return "Gran Electrodoméstico"
+    if "hogar" in name or "home" in name or "kitchen" in name:
+        return "Hogar"
+    # Fallback: usar el nombre del fichero sin extensión, limpio
+    clean = re.sub(r"keepaexport.*?bestsellerslist.*?\d+", "", name, flags=re.IGNORECASE).strip("-_ ")
+    return clean.title() if clean else path.stem
 
 @st.cache_data
-def load_keepa_files(upload_dir: str, extra_dir: str = "") -> pd.DataFrame:
-    """Carga automáticamente todos los xlsx Keepa del directorio del proyecto
-    y del directorio temporal de sesión (ficheros subidos desde la UI)."""
+def load_keepa_files(upload_dir: str) -> pd.DataFrame:
+    """Carga automáticamente todos los xlsx Keepa que encuentre en el directorio."""
     import glob
     dfs = []
-    dirs = [upload_dir]
-    if extra_dir and Path(extra_dir).exists():
-        dirs.append(extra_dir)
-
-    for d in dirs:
-        files = sorted(glob.glob(str(Path(d) / "*.xlsx")) +
-                       glob.glob(str(Path(d) / "*.xls")))
-        for fpath in files:
-            p = Path(fpath)
-            if not _is_keepa_file(p):
+    files = sorted(glob.glob(str(Path(upload_dir) / "*.xlsx")) +
+                   glob.glob(str(Path(upload_dir) / "*.xls")))
+    for fpath in files:
+        p = Path(fpath)
+        if not _is_keepa_file(p):
+            continue
+        try:
+            df = pd.read_excel(p)
+            # Verify it looks like a Keepa export (has ASIN column)
+            if "ASIN" not in df.columns and "Título" not in df.columns:
                 continue
-            try:
-                df = pd.read_excel(p)
-                if "ASIN" not in df.columns and "Título" not in df.columns:
-                    continue
-                df["_source"], df["_country"] = _guess_source(p)
-                df["_filename"] = p.name
-                dfs.append(df)
-            except Exception:
-                continue
+            df["_source"] = _guess_source(p)
+            df["_filename"] = p.name
+            dfs.append(df)
+        except Exception:
+            continue
     if not dfs:
         return pd.DataFrame()
     return _process_keepa(pd.concat(dfs, ignore_index=True))
@@ -274,7 +235,6 @@ def load_keepa_files(upload_dir: str, extra_dir: str = "") -> pd.DataFrame:
 def load_custom_file(file) -> pd.DataFrame:
     df = pd.read_csv(file) if file.name.endswith(".csv") else pd.read_excel(file)
     df["_source"] = "Fichero propio"
-    df["_country"] = "ES"
     return _process_keepa(df)
 
 def _process_keepa(df: pd.DataFrame) -> pd.DataFrame:
@@ -947,7 +907,7 @@ if _feed_path and Path(_feed_path).exists():
 else:
     df_cecotec = load_cecotec_feed(str(UPLOAD_DIR))
 
-df_keepa = load_keepa_files(str(UPLOAD_DIR), st.session_state.get("keepa_extra_dir",""))
+df_keepa = load_keepa_files(str(UPLOAD_DIR))
 _stock_path = st.session_state.get("stock_path")
 if _stock_path and Path(_stock_path).exists():
     df_stock_data = load_stock(_stock_path)
@@ -988,7 +948,7 @@ with c5:
         load_cecotec_feed.clear()
         load_keepa_files.clear()
         load_stock.clear()
-        for k in ["results","results_custom","results_manual","feed_path","stock_path","keepa_extra_dir","keepa_tmp_dir"]:
+        for k in ["results","results_custom","results_manual","feed_path","stock_path"]:
             st.session_state.pop(k, None)
         st.success("Caché limpiado")
         st.rerun()
@@ -1028,49 +988,32 @@ with tab_keepa:
         df_relevant = df_keepa[df_keepa["_cecotec_relevant"]].copy()
         df_skipped  = df_keepa[~df_keepa["_cecotec_relevant"]].copy()
         st.markdown('<div class="cec-section-title">📊 Bestsellers Amazon · Análisis de competencia</div>', unsafe_allow_html=True)
-        # KPIs dinámicos por fuente y país
+        # KPIs dinámicos por fuente detectada
         source_counts = df_keepa["_source"].value_counts()
         kpi_html = "".join(
             f'<div class="kpi"><div class="val">{cnt:,}</div><div class="lbl">{src}</div></div>'
             for src, cnt in source_counts.items()
         )
-        if "_country" in df_keepa.columns:
-            country_counts = df_keepa["_country"].value_counts()
-            for country, cnt in country_counts.items():
-                flag = COUNTRY_FLAGS.get(country, "🌍")
-                kpi_html += f'<div class="kpi"><div class="val">{flag} {cnt:,}</div><div class="lbl">{country}</div></div>'
         kpi_html += f'<div class="kpi"><div class="val">{len(df_relevant)}</div><div class="lbl">Con equiv. Cecotec</div></div>'
         kpi_html += f'<div class="kpi"><div class="val">{len(df_skipped)}</div><div class="lbl">Sin cobertura</div></div>'
         st.markdown(f'<div class="kpi-row">{kpi_html}</div>', unsafe_allow_html=True)
 
-        # Filters
-        _fcol1, _fcol2, _fcol3, _fcol4 = st.columns(4)
-        with _fcol1:
+        c1, c2, c3 = st.columns(3)
+        with c1:
             _sources = sorted(df_keepa["_source"].unique().tolist())
-            src = st.multiselect("Categoría", _sources, default=_sources, key="k_src")
-        with _fcol2:
-            if "_country" in df_keepa.columns:
-                _countries = sorted(df_keepa["_country"].unique().tolist())
-                country_sel = st.multiselect(
-                    "País", [f"{COUNTRY_FLAGS.get(c,'🌍')} {c}" for c in _countries],
-                    default=[f"{COUNTRY_FLAGS.get(c,'🌍')} {c}" for c in _countries],
-                    key="k_country"
-                )
-                country_sel_codes = [c.split(" ")[-1] for c in country_sel]
-            else:
-                country_sel_codes = None
-        with _fcol3:
+            src = st.multiselect("Origen", _sources, default=_sources, key="k_src")
+        with c2:
             pmax = float(df_relevant["precio"].max() or 500)
             pmin_v, pmax_v = st.slider("Precio competidor (€)", 0.0, pmax, (0.0, pmax), step=5.0, key="k_p")
-        with _fcol4:
+        with c3:
             procesar_todos = st.checkbox("Procesar TODOS los relevantes", value=True)
             if not procesar_todos:
                 n = st.number_input("Máx. productos", 1, len(df_relevant), min(50, len(df_relevant)), key="k_n")
 
-        mask = df_relevant["_source"].isin(src) & df_relevant["precio"].between(pmin_v, pmax_v)
-        if country_sel_codes and "_country" in df_relevant.columns:
-            mask &= df_relevant["_country"].isin(country_sel_codes)
-        df_proc = df_relevant[mask]
+        df_proc = df_relevant[
+            df_relevant["_source"].isin(src) &
+            df_relevant["precio"].between(pmin_v, pmax_v)
+        ]
         if not procesar_todos:
             df_proc = df_proc.head(int(n))
 
@@ -1150,81 +1093,29 @@ with tab_manual:
 
 # ═══ TAB 3 · FICHERO ══════════════════════════════════════════════════════════
 with tab_fichero:
-    st.markdown('<div class="cec-section-title">📂 Gestión de ficheros</div>', unsafe_allow_html=True)
-
-    sub1, sub2 = st.tabs(["📊 Subir Keepa (añadir a la sesión)", "🔍 Analizar fichero puntual"])
-
-    # ── Subir ficheros Keepa a la sesión ─────────────────────────────────────
-    with sub1:
-        st.markdown("Sube uno o varios exports de Keepa para añadirlos a la sesión actual. Se combinan con los que ya hay en la carpeta del proyecto.")
-
-        keepa_uploads = st.file_uploader(
-            "Exports Keepa (.xlsx)",
-            type=["xlsx","xls"],
-            accept_multiple_files=True,
-            key="keepa_uploads",
-        )
-
-        if keepa_uploads:
-            import tempfile, glob as _glob
-            tmp_dir = st.session_state.get("keepa_tmp_dir")
-            if not tmp_dir or not Path(tmp_dir).exists():
-                tmp_dir = tempfile.mkdtemp()
-                st.session_state["keepa_tmp_dir"] = tmp_dir
-
-            saved = []
-            for f in keepa_uploads:
-                dest = Path(tmp_dir) / f.name
-                dest.write_bytes(f.read())
-                saved.append(f.name)
-
-            st.success(f"✅ {len(saved)} fichero(s) guardados en sesión: {', '.join(saved)}")
-            st.caption("Pulsa 🗑️ **Limpiar caché** en la barra superior para recargar con los nuevos ficheros.")
-
-            if st.button("🔄 Recargar datos ahora", type="primary", use_container_width=True, key="btn_reload_keepa"):
-                load_keepa_files.clear()
-                st.session_state["keepa_extra_dir"] = tmp_dir
+    st.markdown('<div class="cec-section-title">📂 Subir fichero de productos competidores</div>', unsafe_allow_html=True)
+    st.markdown("CSV o Excel con columnas: `titulo`, `fabricante`, `precio`, `subcategoria`, `caracteristicas` (o formato Keepa).")
+    uploaded = st.file_uploader("CSV o Excel", type=["csv","xlsx","xls"], key="cfile")
+    if uploaded:
+        try:
+            df_custom = load_custom_file(uploaded)
+            df_rel_c  = df_custom[df_custom["_cecotec_relevant"]].copy()
+            st.success(f"✅ {len(df_custom)} productos · {len(df_rel_c)} con equivalente Cecotec posible")
+            st.dataframe(df_custom[["titulo","fabricante","precio","subcategoria","_cecotec_relevant"]].rename(
+                columns={"_cecotec_relevant":"relevante"}), use_container_width=True, hide_index=True,
+                column_config={"precio":st.column_config.NumberColumn(format="%.2f €")})
+            ca, cb = st.columns(2)
+            with ca: solo = st.checkbox("Solo con equiv. Cecotec posible", value=True)
+            with cb: mx = st.number_input("Máx. productos", 1, len(df_custom), len(df_custom), key="mx_c")
+            df_p = (df_rel_c if solo else df_custom).head(int(mx))
+            st.info(f"Se procesarán **{len(df_p)}** productos · matching instantáneo ⚡")
+            if st.button("🚀 Buscar alternativas", type="primary", use_container_width=True, key="btn_c"):
+                with st.spinner("Calculando…"):
+                    st.session_state["results_custom"] = run_search_local(df_p, df_cecotec)
+                st.session_state["active_tab"] = "resultados"
                 st.rerun()
-
-        # Show currently loaded files
-        if keepa_ok and "_filename" in df_keepa.columns:
-            st.markdown("**Ficheros actualmente cargados:**")
-            file_summary = df_keepa.groupby(["_filename","_source","_country"] if "_country" in df_keepa.columns else ["_filename","_source"]).agg(
-                Total=("asin","count"),
-                Relevantes=("_cecotec_relevant","sum"),
-            ).reset_index().rename(columns={"_filename":"Fichero","_source":"Categoría","_country":"País"})
-        if "País" in file_summary.columns:
-            file_summary["País"] = file_summary["País"].apply(lambda c: f"{COUNTRY_FLAGS.get(c,'🌍')} {c}")
-            st.dataframe(file_summary, use_container_width=True, hide_index=True)
-        else:
-            st.info("No hay ficheros Keepa cargados aún.")
-
-    # ── Analizar fichero puntual ──────────────────────────────────────────────
-    with sub2:
-        st.markdown("Sube un CSV o Excel con productos competidores para comparar puntualmente sin añadirlos a la sesión.")
-        st.caption("Columnas soportadas: `titulo`, `fabricante`, `precio`, `subcategoria`, `caracteristicas` (o formato Keepa completo)")
-
-        uploaded = st.file_uploader("CSV o Excel", type=["csv","xlsx","xls"], key="cfile")
-        if uploaded:
-            try:
-                df_custom = load_custom_file(uploaded)
-                df_rel_c  = df_custom[df_custom["_cecotec_relevant"]].copy()
-                st.success(f"✅ {len(df_custom)} productos · {len(df_rel_c)} con equivalente Cecotec posible")
-                st.dataframe(df_custom[["titulo","fabricante","precio","subcategoria","_cecotec_relevant"]].rename(
-                    columns={"_cecotec_relevant":"relevante"}), use_container_width=True, hide_index=True,
-                    column_config={"precio":st.column_config.NumberColumn(format="%.2f €")})
-                ca, cb = st.columns(2)
-                with ca: solo = st.checkbox("Solo con equiv. Cecotec posible", value=True)
-                with cb: mx = st.number_input("Máx. productos", 1, len(df_custom), len(df_custom), key="mx_c")
-                df_p = (df_rel_c if solo else df_custom).head(int(mx))
-                st.info(f"Se procesarán **{len(df_p)}** productos · matching instantáneo ⚡")
-                if st.button("🚀 Buscar alternativas", type="primary", use_container_width=True, key="btn_c"):
-                    with st.spinner("Calculando…"):
-                        st.session_state["results_custom"] = run_search_local(df_p, df_cecotec)
-                    st.session_state["active_tab"] = "resultados"
-                    st.rerun()
-            except Exception as e:
-                st.error(f"Error: {e}")
+        except Exception as e:
+            st.error(f"Error: {e}")
 
 # ═══ TAB 4 · RESULTADOS ═══════════════════════════════════════════════════════
 with tab_resultados:
